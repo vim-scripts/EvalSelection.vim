@@ -3,8 +3,8 @@
 # @Author:      Thomas Link (samul AT web.de)
 # @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 # @Created:     11-Mär-2004.
-# @Last Change: 12-Feb-2005.
-# @Revision:    0.205
+# @Last Change: 13-Feb-2005.
+# @Revision:    0.244
 
 # require "open3"
 
@@ -12,11 +12,12 @@ $EvalSelectionTalkers = Hash.new
 
 class EvalSelectionAbstractInterpreter
     attr :iid
+    attr_accessor :active
     
     def initialize
-        @iid = ""
+        @iid    = ""
         setup
-        initialize_communication
+        @active = initialize_communication
     end
 
     def setup 
@@ -40,8 +41,11 @@ class EvalSelectionAbstractInterpreter
         VIM::command(%Q{let g:evalSelLastCmd   = "#{blabber}"})
         VIM::command(%Q{let g:evalSelLastCmdId = "#{@iid}"})
         # puts interact(text)
-        for i in interact(text)
-            puts i
+        rv = interact(text)
+        if rv
+            for i in rv
+                puts i
+            end
         end
     end
 
@@ -84,6 +88,7 @@ class EvalSelectionInterpreter < EvalSelectionAbstractInterpreter
             @ioOut.close
             @ioIn = @ioOut = @ioErr = nil
         end
+        return @ioOut
     end
     
     def interact(text)
@@ -199,17 +204,25 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
                 raise "EvalSelection: Parse error: #{text}"
             end
         else
-            rv = ole_evaluate(text)
+            rv = postprocess(ole_evaluate(text))
         end
         if rv.kind_of?(Array)
-            rv.collect {|e| e.inspect}.join("\n")
+            rv.shift if rv.first == ""
+            rv.pop if rv.last == ""
+            rv.collect {|e| "%s" % e}.join("\n")
+        elsif rv.nil?
+            rv
         else
-            rv.inspect
+            "%s" % rv
         end
     end
 
-    def tear_down 
-        ole_tear_down if @ole_server
+    def tear_down
+        if @ole_server
+            ole_tear_down
+        else
+            true
+        end
     end
     
     def ole_setup
@@ -233,31 +246,45 @@ module EvalSelection
         if i
             i.send(*args)
         else
-            VIM::command(%Q{throw "EvalSelectionTalk: Set up interaction with #{@iid} first!"})
+            VIM::command(%Q{throw "EvalSelectionTalk: Set up interaction with #{id} first!"})
         end
     end
     module_function :withId
     
-    def setup(interpreterClass) 
-        i = $EvalSelectionTalkers[id] || interpreterClass.new
-        if i
-            $EvalSelectionTalkers[i.iid] = i
-            return true
-        else
-            return false
+    def setup(name, interpreterClass, quiet=false)
+        i = $EvalSelectionTalkers[name]
+        if !i
+            i = interpreterClass.new
+            $EvalSelectionTalkers[i.iid] = i if i
+        elsif !quiet
+            VIM::command(%Q{echom "EvalSelection: Interaction with #{name} already set up!"})
         end
+        return i
     end
     module_function :setup
-
-    def tear_down(id) 
-        withId(id, :tear_down)
-    end
-    module_function :tear_down
 
     def talk(id, text) 
         withId(id, :talk, text)
     end
     module_function :talk
+    
+    def tear_down(id)
+        if withId(id, :tear_down)
+            $EvalSelectionTalkers[id] = nil
+        else
+            VIM::command(%Q{throw "EvalSelection: Can't stop #{id}!"})
+        end
+    end
+    module_function :tear_down
+
+    def tear_down_all
+        $EvalSelectionTalkers.each do |id, interp|
+            if interp and interp.tear_down
+                $EvalSelectionTalkers[id] = nil
+            end
+        end
+    end
+    module_function :tear_down_all
 end
 
 # vim: ff=unix

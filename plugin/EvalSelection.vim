@@ -2,8 +2,8 @@
 " @Author:      Thomas Link (samul AT web.de)
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     29-Jän-2004.
-" @Last Change: 12-Feb-2005.
-" @Revision:    0.9.0.184
+" @Last Change: 13-Feb-2005.
+" @Revision:    0.10.315
 " 
 " vimscript #889
 " 
@@ -17,7 +17,7 @@
 if &cp || exists("s:loaded_evalselection")
     finish
 endif
-let s:loaded_evalselection = 9
+let s:loaded_evalselection = 10
 
 " Parameters {{{2
 if !exists("g:evalSelectionLeader")
@@ -75,12 +75,15 @@ fun! EvalSelection(id, proc, cmd, ...)
     " exe a:cmd ." ". e
     silent exec a:cmd ." ". e
     redir END
-    if process != ""
-        exec "let @e = ". escape(process, '"\')
-    endif
-    if a:proc != ""
-        let g:evalSelLastCmdId = a:id
-        exe a:proc . ' "' . escape(strpart(@e, 1), '"\') . '"'
+    let @e = substitute(@e, "\<c-j>$", "", "")
+    if @e != ""
+        if process != ""
+            exec "let @e = ". escape(process, '"\')
+        endif
+        if a:proc != ""
+            let g:evalSelLastCmdId = a:id
+            exe a:proc . ' "' . escape(strpart(@e, 1), '"\') . '"'
+        endif
     endif
 endf
 
@@ -348,7 +351,7 @@ fun! EvalSelectionTalk(id, body)
 endf
 
 exec "rubyfile ".g:evalSelectionRubyDir."EvalSelection.rb"
-
+autocmd VimLeave * ruby EvalSelection.tear_down_all
 
 if exists("g:evalSelectionRInterpreter")
     if !exists("g:evalSelectionRCmdLine")
@@ -359,7 +362,7 @@ if exists("g:evalSelectionRInterpreter")
         endif
     endif
 
-    command! EvalSelectionSetupR   ruby EvalSelection.setup(EvalSelectionR)
+    command! EvalSelectionSetupR   ruby EvalSelection.setup("R", EvalSelectionR)
     command! EvalSelectionQuitR    ruby EvalSelection.tear_down("R")
     command! EvalSelectionCmdLineR call EvalSelectionCmdLine("r")
 
@@ -374,7 +377,7 @@ if exists("g:evalSelectionRInterpreter")
 
     ruby <<EOR
     module EvalSelectionRExtra
-        if VIM::evaluate("g:evalSelectionRInterpreter") == "RClean"
+        if VIM::evaluate("g:evalSelectionRInterpreter") =~ /Clean$/
             def postprocess(text)
                 text.sub(/^.*?\n([>+] .*?\n)*(\[\d\] )?/m, "")
             end
@@ -385,24 +388,21 @@ if exists("g:evalSelectionRInterpreter")
         end
     end
 EOR
-    if g:evalSelectionRInterpreter == 'RDCOM'
+    if g:evalSelectionRInterpreter =~ '^RDCOM'
         ruby << EOR
         require 'win32ole'
         require 'tmpdir'
-        class EvalSelectionR < EvalSelectionOLE
+        class EvalSelectionAbstractR < EvalSelectionOLE
             def setup
                 @iid         = "R"
                 @interpreter = "rdcom"
-                @filename    = File.join(Dir.tmpdir, "EvalSelection.Rout")
-            end
-
-            def ole_setup
-                @ole_server = WIN32OLE.new("StatConnectorSrv.StatConnector")
-                @ole_server.Init("R")
-                # these have no consequence
-                @ole_server.EvaluateNoReturn(%{options(chmhelp=TRUE)})
-                @ole_server.EvaluateNoReturn(%{library(Rcmdr)})
-                # @ole_server.EvaluateNoReturn(%{options(pager="console")})
+                @null_cmds   = [
+                    "data",
+                    "help.search",
+                    "help",
+                ]
+                @null_cmds.collect! {|c| /^\s*#{Regexp.escape(c)}\s*\([^\n]*\)\s*$/m }
+                @null_cmds << /^\s*\?[^\n]+\s*$/m
             end
 
             def ole_tear_down
@@ -410,32 +410,76 @@ EOR
                     @ole_server.EvaluateNoReturn(%{q()})
                 rescue
                 end
-                # @ole_server.Close
+                begin
+                    @ole_server.Close
+                rescue
+                end
+                return true
             end
+            
+            if VIM::evaluate("g:evalSelectionRInterpreter") =~ /Clean$/
+                def postprocess(result)
+                    case result
+                    when Array
+                        result.collect {|l| clean_result(l)}
+                    when String
+                        clean_result(result)
+                    else
+                        result
+                    end
+                end
 
-            def ole_evaluate(text)
-                #0
-                # @ole_server.Evaluate(text)
-                #1
-                # @ole_server.Evaluate(%{capture.output(#{text})}).join("\n")
-                #2
-                # @ole_server.EvaluateNoReturn(%{sink("#@filename")})
-                # @ole_server.EvaluateNoReturn(text)
-                # @ole_server.EvaluateNoReturn(%{sink(NULL)})
-                # rv = File.open(@filename) {|io| io.read}
-                # rv
-                #3
-                # @ole_server.Evaluate(%{evalSelection.textConnection <- textConnection("evalSelection", "w")})
-                # @ole_server.Evaluate(%{sink(evalSelection.textConnection)})
-                # @ole_server.Evaluate(text)
-                # @ole_server.Evaluate(%{sink()})
-                # @ole_server.Evaluate(%{close(evalSelection.textConnection)})
-                # @ole_server.Evaluate(%{cat(evalSelection, sep = "\n")})
-                #4
-                @ole_server.Evaluate(%{doItAndPrint("#{text.gsub(/"/, '\\\\"')}")})
+                def clean_result(text)
+                    text.sub(/^\[\d+\]\s*/, '')
+                end
             end
         end
 EOR
+        if g:evalSelectionRInterpreter =~ 'Commander'
+            ruby << EOR
+            class EvalSelectionR < EvalSelectionAbstractR
+                def ole_setup
+                    @ole_server = WIN32OLE.new("StatConnectorSrv.StatConnector")
+                    @ole_server.Init("R")
+                    @ole_server.EvaluateNoReturn(%{options(chmhelp=TRUE)})
+                    @ole_server.EvaluateNoReturn(%{library(Rcmdr)})
+                end
+                
+                def ole_evaluate(text)
+                    @ole_server.Evaluate(%{capture.output(doItAndPrint("#{text.gsub(/"/, '\\\\"')}"))})
+                end
+            end
+EOR
+        else
+            ruby << EOR
+            class EvalSelectionR < EvalSelectionAbstractR
+                def ole_setup
+                    @ole_server = WIN32OLE.new("StatConnectorSrv.StatConnector")
+                    @ole_server.Init("R")
+                    if VIM::evaluate("has('gui')")
+                        @ole_server.EvaluateNoReturn(%{options(chmhelp=TRUE)})
+                        @ole_server.EvaluateNoReturn(%{EvalSelectionPager <- function(f, hd, ti, del) {
+    system(paste("cmd /c start gvim --servername GVIMPAGER --remote-silent ", gsub(" ", "\\\\ ", f)))
+    if (del) {
+        Sys.sleep(5)
+        unlink(f)
+    }
+}})
+                        @ole_server.EvaluateNoReturn(%{options(pager=EvalSelectionPager)})
+                    end
+                end
+                
+                def ole_evaluate(text)
+                    @ole_server.EvaluateNoReturn(%{evalSelection.out <- textConnection("evalSelection.log", "w")})
+                    @ole_server.EvaluateNoReturn(%{sink(evalSelection.out)})
+                    @ole_server.EvaluateNoReturn(%{print({#{text}})})
+                    @ole_server.EvaluateNoReturn(%{sink()})
+                    @ole_server.EvaluateNoReturn(%{close(evalSelection.out)})
+                    @ole_server.Evaluate(%{if (is.character(evalSelection.log) & length(evalSelection.log) == 0) NULL else evalSelection.log})
+                end
+            end
+EOR
+        endif
     elseif g:evalSelectionRInterpreter =~ '^RFO'
         ruby << EOR
         require "tmpdir"
@@ -477,7 +521,7 @@ endif
 
 
 if exists("g:evalSelectionSpssInterpreter")
-    command! EvalSelectionSetupSPSS   ruby EvalSelection.setup(EvalSelectionSPSS)
+    command! EvalSelectionSetupSPSS   ruby EvalSelection.setup("SPSS", EvalSelectionSPSS)
     command! EvalSelectionQuitSPSS    ruby EvalSelection.tear_down("SPSS")
     command! EvalSelectionCmdLineSPSS call EvalSelectionCmdLine("sps")
 
@@ -508,6 +552,7 @@ if exists("g:evalSelectionSpssInterpreter")
 
             def ole_tear_down
                 @ole_server.Quit
+                return true
             end
 
             def ole_evaluate(text)
@@ -534,14 +579,14 @@ if exists("g:evalSelectionOCamlInterpreter")
         call EvalSelectionGenerateBindings("o", "ocaml")
     endif
 
-    command! EvalSelectionSetupOCaml   ruby EvalSelection.setup(EvalSelectionOCaml)
+    command! EvalSelectionSetupOCaml   ruby EvalSelection.setup("OCaml", EvalSelectionOCaml)
     command! EvalSelectionQuitOCaml    ruby EvalSelection.tear_down("OCaml")
     command! EvalSelectionCmdLineOCaml call EvalSelectionCmdLine("ocaml")
 
     ruby << EOR
     class EvalSelectionOCaml < EvalSelectionInterpreter
         def setup
-            @iid            = VIM::evaluate("g:evalSelectionOCamlInterpreter")
+            @iid            = "OCaml"
             @interpreter    = VIM::evaluate("g:evalSelectionOCamlCmdLine")
             @printFn        = "%{BODY}"
             @quitFn         = "exit 0;;"
@@ -585,7 +630,7 @@ if exists("g:evalSelectionSchemeInterpreter")
         call EvalSelectionGenerateBindings("c", "scheme")
     endif
 
-    command! EvalSelectionSetupScheme   ruby EvalSelection.setup(EvalSelectionScheme)
+    command! EvalSelectionSetupScheme   ruby EvalSelection.setup(VIM::evaluate("g:evalSelectionSchemeInterpreter"), EvalSelectionScheme)
     command! EvalSelectionQuitScheme    ruby EvalSelection.tear_down(VIM::evaluate("g:evalSelectionSchemeInterpreter"))
     command! EvalSelectionCmdLineScheme call EvalSelectionCmdLine("scheme")
 
@@ -639,7 +684,7 @@ EOR
         call EvalSelectionGenerateBindings("l", "lisp")
     endif
     
-    command! EvalSelectionSetupLisp ruby EvalSelection.setup(EvalSelectionLisp)
+    command! EvalSelectionSetupLisp ruby EvalSelection.setup(VIM::evaluate("g:evalSelectionLispInterpreter"), EvalSelectionLisp)
     command! EvalSelectionQuitLisp  ruby EvalSelection.tear_down(VIM::evaluate("g:evalSelectionLispInterpreter"))
     command! EvalSelectionCmdLineScheme call EvalSelectionCmdLine("lisp")
 endif

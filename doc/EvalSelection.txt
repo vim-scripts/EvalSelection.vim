@@ -22,6 +22,14 @@ You can uninstall EvalSelection by running these commands: >
                                                     *EvalSelection*
 * Description~
 
+Evaluate source code selected in a visual region. The result can be displayed 
+in an interaction log, appended to the text, replace the text, or saved in the 
+@e register. This is useful for performing small text manipulation tasks or 
+calculations that aren't worth the trouble of creating a new file or switching 
+to a different program, but which are too big for being handled in the command 
+line.
+
+
 Evaluate source code selected in a visual region. This is useful for 
 performing small text manipulation tasks or calculations that aren't worth the 
 trouble of creating a new file or switching to a different program, but which 
@@ -70,10 +78,15 @@ If ruby-support is compiled in, the following languages[1] are available too
     o :: ocaml
         set g:evalSelectionOCamlInterpreter to "OCaml" or "OCamlClean"[2]
     R :: R
-        set g:evalSelectionRInterpreter "R", "RClean"[2], or "RDCOM" [3, 4]
+        set g:evalSelectionRInterpreter "R", "RClean"[2], or "RDCOM", "RDCOM 
+        Commander", "RDCOM Clean" [3, 4]
     S :: SPSS
         limited support (no return values), the (one-way) communication with 
         SPSS is done via OLE automation [4]
+
+In order to enable the interaction with an interpreter, you usually have to 
+set the variable g:evalSelection{LANG}Interpreter to the appropriate value and 
+make g:evalSelection{LANG}CmdLine point to the right location.
 
 [1] This feature is experimental. The quality and reliability of the 
 interaction with the interpreters varies. Some of them are mainly test cases 
@@ -85,12 +98,9 @@ this isn't an issue.
 
 [2] "*Clean" means that the output is stripped of superfluous information.
 
-[3] This requires the R(D)COM extension, the Rcmdr and its libraries to be 
-installed and works only under windows (I assume). The problem with this 
-approach is that the COM server has no notion of a REPL, which is why the 
-output in the log represents the data as "it is" and not as printed on the 
-REPL. Anyway, the interaction is mirrored in the RCommander window, which 
-works quite well if switching between windows appears acceptable to you.
+[3] This requires the R(D)COM extension to be installed and works only under 
+windows (I assume). The "Commander" variante also requires Rcmdr and its 
+libraries.
 
 [4] When interacting with an interpreter via OLE, you can send COM commands by 
 prepending the argument with a "#" sign. Arguments are separated by 
@@ -99,9 +109,6 @@ whitespace. You can get a list of available commands by sending
 for further details. (As a mather of fact, commands prepended by "#" refer to 
 regular ruby methods that are sent to the server object.)
 
-In order to enable the interaction with an interpreter, you usually have to 
-set the variable g:evalSelection{LANG}Interpreter to the appropriate value and 
-make g:evalSelection{LANG}CmdLine point to the right location.
 
                                                     *EvalSelection-Modes*
 MODE being one of: >
@@ -128,14 +135,13 @@ NOTE: The e-register is overwritten with the result of an evaluation.
 
 ** Commands~
 
-    EvalSelectionCmdLine LANG :: Simulate a command line for LANG (quit 
-    with empty input); due to the primitive handling of input/output, 
-    this is a one way "interaction"; no user input is possible; all 
-    output is redirected to the log. Exit with ^D + Enter, i.e. enter 
-    the ^D character.
-
-    EvalSelectionSetup{LANG}  :: Set up interaction with external interpreter 
+    EvalSelectionSetup{LANG} :: Set up interaction with external interpreter 
     (but see below)
+
+    EvalSelectionCmdLine LANG :: Simulate a command line for LANG; due to the 
+    primitive handling of input/output, no input commands (like read, get kind 
+    of stuff) can be used; all output is redirected to the log. Exit with ^D + 
+    Enter, i.e. enter the ^D character.
 
     EvalSelectionQuit INTERPRETER :: Quit interaction with an 
     external interpreter
@@ -346,7 +352,12 @@ Gets stuck when evaluating several expressions at once.
  4. data(attitude)
     summary(attitude)
     summary(lm(rating ~ complaints, data=attitude))
+    plot(attitude) # Plotting works only via RDCOM
 
+ 5. x <- function(a) {
+        a * 2
+    }
+    x(3)
 
 * Problems~
 - Vim sometimes hangs or crashes (@WinXP) when talking to an external 
@@ -354,17 +365,26 @@ Gets stuck when evaluating several expressions at once.
 
 
 * Version History~
+ 0.10 :: capture interaction with R via R(D)COM; "RDCOM" uses a 2nd instance 
+ of gvim as a pager (it doesn't start RCmdr any more); "RDCOM Commander" uses 
+ RCmdr; "RDCOM Clean" and "RDCOM Commander Clean" modes; take care of 
+ functions with void results (like data, help.search ...)
+
  0.9 :: support for communication via win32 COM/OLE (R, SPSS); general 
-   calculator shortcuts
+ calculator shortcuts
+
  0.8 :: improved interaction with external interpreters (it's still not really 
-   usable but it's getting better); reunified EvalSelection.vim and 
-   EvalSelectionRuby.vim
+ usable but it's getting better); reunified EvalSelection.vim and 
+ EvalSelectionRuby.vim
+
  0.7 :: Improved interaction (e.g., multi-line commands in R); moved code 
-   depending on +ruby to EvalSelectionRuby.vim (thanks to Grant Bowman for 
-   pointing out this problem); saved all files in unix format; added python, 
-   perl, and tcl (I can't tell if they work)
+ depending on +ruby to EvalSelectionRuby.vim (thanks to Grant Bowman for 
+ pointing out this problem); saved all files in unix format; added python, 
+ perl, and tcl (I can't tell if they work)
+
  0.6 :: Interaction with interpreters; separated logs; use of redir; 
-   EvalSelectionCmdLine (CLI like interaction)
+ EvalSelectionCmdLine (CLI like interaction)
+
  0.5 :: Initial Release
 
 
