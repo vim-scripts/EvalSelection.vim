@@ -1,0 +1,71 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=889
+
+Evaluate source code selected in a visual region. The result can be displayed 
+in an interaction log, appended to the text, replace the text, or saved in the 
+@e register. This is useful for performing small text manipulation tasks or 
+calculations that aren't worth the trouble of creating a new file or switching 
+to a different program, but which are too big for being handled in the command 
+line.
+
+The key bindings follow this scheme:
+
+    <Leader>e{LANGUAGE}{MODE} :: work on the visual region
+    <Leader>E{LANGUAGE}{MODE} :: work on the contents of the e-register
+    <Leader>x{MODE}           :: work on the visual region (derives LANGUAGE 
+                                 from the buffer's 'filetype')
+
+LANGUAGE being one of:
+
+    v :: vim (comments at the end of line after vim code could cause problems)
+    r :: ruby (requires compiled-in ruby support)
+    s :: sh (using system())
+    e :: calculator, evaluate formula (using either ruby, python, perl, tcl, 
+         or vim)
+
+I haven't actually tested the following three bindings because I use 
+neither of them. Anyway, as I happen to use a Vim with +tcl, +python and 
++perl support compiled in, I added them to the standard bindings:
+
+    y :: python (requires compiled-in python support)
+    p :: perl (requires compiled-in perl support)
+    t :: tcl (requires compiled-in tcl support)
+    z :: mzscheme (requires compiled-in mzscheme support)
+
+If ruby-support is compiled in, the following languages are available too 
+(but see |EvalSelection-Interaction| below):
+    
+    c :: scheme
+        set g:evalSelectionSchemeInterpreter to "Gauche" or "Chicken"
+    l :: lisp
+        set g:evalSelectionLispInterpreter to "CLisp"
+    o :: ocaml
+        set g:evalSelectionOCamlInterpreter to "OCaml" or "OCamlClean"
+    R :: R
+        set g:evalSelectionRInterpreter "R", "RClean", or "RDCOM"
+    S :: SPSS
+        limited support (no return values), the (one-way) communication with 
+        SPSS is done via OLE automation
+
+MODE being one of:
+
+    x :: just evaluate and put the result in the e-register
+    e :: the same as x
+    p :: echo/print the result on the command line
+    a :: append the result to visual region
+    r :: replace visual region with the result
+    l :: insert the result in a temporary interaction log
+
+
+Commands:
+
+    EvalSelectionCmdLine LANG :: Simulate a command line for LANG; due to the 
+    primitive handling of input/output, no input commands (like read, get kind 
+    of stuff) can be used; all output is redirected to the log. Exit with ^D + 
+    Enter, i.e. enter the ^D character.
+
+    EvalSelectionSetup{LANG}  :: Set up interaction with external interpreter 
+    (but see below)
+
+    EvalSelectionQuit INTERPRETER :: Quit interaction with an 
+    external interpreter
+
