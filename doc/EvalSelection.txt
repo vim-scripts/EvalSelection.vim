@@ -1,0 +1,319 @@
+*EvalSelection .txt*	EvalSelection -- evaluate the visual area
+
+Author: Thomas Link (samul AT web de)
+
+
+* Install
+
+Extract the archive to your personal vimfiles directory.
+
+|EvalSelection-Interaction| with an external interpreter requires 
++ruby-support. You might want to modify g:evalSelectionRubyDir: >
+
+    Win32: $VIM."/vimfiles/ruby/"
+    Else:  "~/.vim/ruby/"
+
+
+
+                                                    *EvalSelection*
+* Description
+
+Evaluate source code selected in a visual region. This is useful for 
+performing small text manipulation tasks or calculations that aren't worth the 
+trouble of creating a new file or switching to a different program, but which 
+are too big for being handled in the command line.
+
+                                                    *EvalSelection-KeyBindings*
+The key bindings follow this scheme: >
+
+    <Leader>e{LANGUAGE}{MODE} :: work on the visual region
+    <Leader>E{LANGUAGE}{MODE} :: work on the contents of the e-register
+    <Leader>x{MODE}           :: work on the visual region (LANGUAGE = 'filetype')
+
+NOTE: In the third form LANGUAGE is replaced with &filetype, which requires 
+the function EvalSelection_{&filetype}(cmd) to be defined. a:cmd is a editor 
+command that processes the result that is put in the e-register.
+    
+LANGUAGE being one of: >
+
+    v :: vim
+    r :: ruby (requires compiled-in ruby support)
+    s :: sh (using system())
+
+I haven't actually tested the following three bindings because I use 
+neither of them. Anyway, as I happen to use a Vim with +tcl, +python and 
++perl support compiled in, I added them to the standard bindings 
+(please, let me know if you run into problems): >
+
+    y :: python (requires compiled-in python support)
+    p :: perl (requires compiled-in perl support)
+    t :: tcl (requires compiled-in tcl support)
+
+!!!experimental feature!!!                          *EvalSelection-ExtKeyBindings*
+If ruby-support is compiled in, the following languages[1] are available too 
+(but see |EvalSelection-Interaction| below): >
+    
+    c :: scheme
+        set g:evalSelectionSchemeInterpreter to "Gauche" or "Chicken"
+    l :: lisp
+        set g:evalSelectionLispInterpreter to "CLisp"
+    o :: ocaml
+        set g:evalSelectionOCamlInterpreter to "OCaml" or "OCamlClean"[2]
+    R :: R
+        set g:evalSelectionRInterpreter "R" or "RClean"[2]
+
+[1] This is hardly tested. Some of them work better, some worse. They are 
+mainly test cases for experimenting with different ways of handling 
+interaction with the restrictions of win32 Ruby. With some interpreters vim 
+appears to get stuck when you try to evaluate multiple commands at once or 
+multi-line commands -- you have to kill the interpreter/subprocess then. With 
+other interpreters, this isn't an issue.
+[2] "*Clean" means that the output is stripped of superfluous information.
+
+In order to enable the interaction with an interpreter, you usually have to 
+set the variable g:evalSelection{LANG}Interpreter to the appropriate value and make 
+g:evalSelection{LANG}CmdLine point to the right location.
+
+MODE being one of: >
+
+    x :: just evaluate and put the result in the e-register
+    e :: now, the same as x
+    p :: echo/print the result on the command line
+    a :: append the result to visual region
+    r :: replace visual region with the result
+    l :: insert the result in a temporary interaction log
+
+You usually have to print a result in order to use it. E.g. in ruby, if 
+you want to insert the result of, say, 15.3/24.0 in the text, you have 
+to type "p 15.3/24.0", select the text, and type <Leader>err. This will 
+replace the visual/selected area with the printed output. I said 
+"usually" because the behaviour differs slightly from language to 
+language.
+
+Define g:evalSelectionLeader, g:evalSelectionRegisterLeader, and 
+g:evalSelectionAutoLeader for using different mapping prefixes.
+
+NOTE: The e-register is overwritten with the result of an evaluation.
+
+
+** Commands
+
+    EvalSelectionCmdLine LANG :: Simulate a command line for LANG (quit 
+    with empty input); due to the primitive handling of input/output, 
+    this is a one way "interaction"; no user input is possible; all 
+    output is redirected to the log. Exit with ^D + Enter, i.e. enter 
+    the ^D character.
+
+    EvalSelectionSetup{LANG}  :: Set up interaction with external interpreter 
+    (but see below)
+
+    EvalSelectionSayQuit INTERPRETER :: Quit interaction with an 
+    external interpreter
+
+LANG and INTERPRETER are (most of the time) case sensitive.
+
+
+** Variables
+
+    - g:evalSelectionLogCommands (default: 0)  
+    If true, also log the command -- otherwise log the results only.
+
+    - g:evalSelectionSeparatedLog (default: 1)
+    Keep logs separated for each language/interpreter.
+   
+    - g:evalSelectionPRE{LANGUAGE}, g:evalSelectionPOST{LANGUAGE}
+    !!!EXPERIMENTAL!!!, don't expect it to work in all cases
+    Define a standard prolog/epilog for LANGUAGE.
+    
+
+
+                                                    *EvalSelection-Interaction*
+* Interaction With An External Interpreter
+
+Don't expect this to work reliable and without some finetuning. Some 
+interpreters make trouble when evaluating several expressions at once or 
+multiline expressions.
+
+EvalSelection usually waits for a break character or break string to 
+occur and then stops reading the interpreters output. If this doesn't 
+happen, vim appears to be stuck -- waiting endlessly for new output. In 
+such a case, you have to kill the interpreter.
+
+In order to interact with an interpreter, you have to:
+
+    1. call :EvalSelectionSetup{LANG}
+       (e.g. :EvalSelectionSetupLisp)
+    2. in order to send commands to the interpreter use the appropriate shortcuts
+       or the function EvalSelection_{lang}(cmd)
+          (e.g. "ey:call EvalSelection_lisp("echomsg"))
+       or the command :EvalSelectionCmdLine {LANG}
+          (e.g. :EvalSelectionCmdLine Lisp)
+    3. call :EvalSelectionSayQuit {INTERPRETER} (e.g. 
+       :EvalSelectionSayQuit  CLisp) when finished
+
+To set up interaction with a new interpreter you have to define (in ruby) 
+a class deriving from EvalSelectionInterpreter. In the method "setup", 
+you should define some of the following object variables:
+
+1. Vital: >
+
+        @iid         = ""
+        @interpreter = nil # The command-line to start the interpreter
+        @printFn     = nil # The function[1] that prints %{BODY}'s result and a record marker
+        @quitFn      = nil # The function[1] that quits the interpreter
+
+[1] "Function" means a string containing the respective function call 
+for the target interpreter.
+
+2. Either >
+
+        @recEndChar  = nil # A character end of record mark (default=ESCAPE)
+
+or/and >
+
+        @recPromptRx = nil # A ruby pattern marking an empty prompt line
+
+3. Optional: >
+
+        @markFn      = nil # Mark end of output
+        @recMarkRx   = nil # Match end of output marker
+        @bannerEndRx = nil # skip banner until this regexp matches
+        @recSkip     = 0   # skip first N records
+        @useNthRec   = 0   # Use every Nth+1 record
+        @postProcess = nil # A block that post-processes the resulting string 
+
+For scheme, lisp, R, and ocaml some tentative classes are predefined -- 
+see |EvalSelection-ExtKeyBindings|.
+
+Under ruby =< 1.8.1@Windows, there is no io.nonblock and subprocesses don't 
+work -- correct me if I'm wrong. We thus have to rely on the following two 
+methods for determining when the interpreter's output has finished:
+
+ 1. Send an record-end-character (default=ESCAPE). This works well unless you 
+    want to actually output this particular character or unless the interpreter 
+    refuses printing such a character.
+
+ 2. Match the output with some regular expression. This means that 
+    regular output mustn't match this particular expression. Anyway, by 
+    adding a command, which prints some weird string after having 
+    processed the argument, one can minimize risks.
+
+If you know of a better solution that is easy to implement, please let me 
+know.
+
+
+* Tests
+
+Mark some code as a visual region, and type the appropriate shortcuts.
+
+
+** Vim
+
+ 1. fun! TwoTimes(a)
+        return a:a * 2
+    endfun
+    echo TwoTimes(2)
+
+ 2. let a = 2
+    echo a * 2
+
+ 3. fun! TwoTimes(a)
+        call inputdialog(a:a ." * 2 =", a:a * 2)
+    endfun
+    call TwoTimes(2)
+
+ 4. echo 1 + 1
+ 
+    
+** Ruby
+
+ 1. def TwoTimes(a)
+        return a*2
+    end
+    p TwoTimes(2)
+
+ 2. b="B"
+    p "a#{b}c"
+
+ 3. with: let g:evalSelectionPREruby = "factor=10"
+    p factor * 20
+
+
+** Python
+
+1. 
+print(1+1)
+2. 
+def twoTimes(a):
+    return a*2
+print twoTimes(2)
+
+
+** Perl
+
+ 1. VIM::Msg("Foo");
+
+
+** Tcl
+
+ 1. puts [expr 1 + 1]
+ 2. Adapted from the tcl help page
+    proc date {} {
+        return [clock format [clock seconds]]
+    }
+    puts [date]
+
+
+** Bash
+
+ 1. export x=/tmp; ls $x 
+ 2. export x=/tmp
+    ls $x
+
+
+** OCaml
+
+ 1. 1 + 1
+ 2. let a = 1 in
+    a + 2
+
+    
+** Scheme
+
+ 1. (+ 1 1)
+ 2. (let ((a 2))
+      (* a 2))
+
+
+** Lisp
+Gets stuck when evaluating several expressions at once.
+
+ 1. (+ 1 1)
+ 2. (let ((a 2))
+      (* a 2))
+
+
+** R
+
+ 1. 1 + 1
+
+ 2. for (x in 25:30) 
+      print(x * 2)
+
+ 3. x = c(1,2,3,4)
+    x = factor(x)
+    x
+
+
+* Version History
+ 
+ 0.7 :: Improved interaction (e.g., multi-line commands in R); moved 
+   code depending on +ruby to EvalSelectionRuby.vim (thanks to Grant 
+   Bowman for pointing out this problem); saved all files in unix 
+   format; added python, perl, and tcl (I can't tell if they work)
+ 0.6 :: Interaction with interpreters; separated logs; use of redir; 
+   EvalSelectionCmdLine (CLI like interaction)
+ 0.5 :: Initial Release
+
+ vim: fdl=1:ff=unix
+
