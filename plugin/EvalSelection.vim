@@ -2,8 +2,8 @@
 " @Author:      Thomas Link (samul AT web.de)
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     29-Jän-2004.
-" @Last Change: 13-Feb-2005.
-" @Revision:    0.10.315
+" @Last Change: 16-Feb-2005.
+" @Revision:    0.13.572
 " 
 " vimscript #889
 " 
@@ -17,7 +17,7 @@
 if &cp || exists("s:loaded_evalselection")
     finish
 endif
-let s:loaded_evalselection = 10
+let s:loaded_evalselection = 13
 
 " Parameters {{{2
 if !exists("g:evalSelectionLeader")
@@ -33,8 +33,13 @@ if !exists("g:evalSelectionAutoLeader")
 endif
 
 if !exists("g:evalSelectionLogCommands")
-    " let g:evalSelectionLogCommands = 1
-    let g:evalSelectionLogCommands = 0
+    let g:evalSelectionLogCommands = 1
+    " let g:evalSelectionLogCommands = 0
+endif
+
+if !exists("g:evalSelectionLogTime")
+    " let g:evalSelectionLogTime = 1
+    let g:evalSelectionLogTime = 0
 endif
 
 if !exists("g:evalSelectionSeparatedLog")
@@ -45,6 +50,10 @@ endif
 if !exists("g:evalSelectionDebugLog")
     let g:evalSelectionDebugLog = 0
     " let g:evalSelectionDebugLog = 1
+endif
+
+if !exists("g:evalSelectionPager")
+    let g:evalSelectionPager = "gvim --servername GVIMPAGER --remote-silent"
 endif
 
 let s:evalSelLogBufNr  = -1
@@ -115,7 +124,7 @@ fun! EvalSelectionLog(txt, ...)
         if logID == ""
             split _EvalSelectionLog_
         else
-            echomsg "split _EvalSelection_".logID."_"
+            " echomsg "split _EvalSelection_".logID."_"
             exec "split _EvalSelection_".logID."_"
         endif
         let s:evalSelLog{logID}_BufNr = bufnr("%")
@@ -133,6 +142,7 @@ fun! EvalSelectionLog(txt, ...)
     setlocal bufhidden=hide
     setlocal noswapfile
     " setlocal buflisted
+    setlocal ft=EvalSelectionLog
 
     if dbg
         let @d = txt
@@ -141,21 +151,25 @@ fun! EvalSelectionLog(txt, ...)
         call <SID>EvalSelectionLogAppend("")
         go 1
         if g:evalSelectionLogCommands && g:evalSelLastCmd != ""
-            if MvNumberOfElements(g:evalSelLastCmd, "\n") == 1 && MvNumberOfElements(txt, "\n") == 1
-                call <SID>EvalSelectionLogAppend(g:evalSelLastCmd ." -> ". txt, 1)
+            let evalSelLastCmd = "|| ". substitute(g:evalSelLastCmd, '\n\ze.', '|| ', 'g')
+            if evalSelLastCmd =~ "\n$"
+                " let sep = "=> "
+                let sep = ""
             else
-                call <SID>EvalSelectionLogAppend(txt, 1)
-                call <SID>EvalSelectionLogAppend(" -> ")
-                call <SID>EvalSelectionLogAppend(g:evalSelLastCmd, 1)
+                " let sep = "\n=> "
+                let sep = "\n"
             endif
+            call <SID>EvalSelectionLogAppend(evalSelLastCmd . sep . txt, 1)
         else
             call <SID>EvalSelectionLogAppend(txt, 1)
         endif
-        let t = "-----".strftime("%c")."-----"
-        if !g:evalSelectionSeparatedLog
-            let t = t. g:evalSelLastCmdId
+        if g:evalSelectionLogTime
+            let t = "|| -----".strftime("%c")."-----"
+            if !g:evalSelectionSeparatedLog
+                let t = t. g:evalSelLastCmdId
+            endif
+            call <SID>EvalSelectionLogAppend(t)
         endif
-        call <SID>EvalSelectionLogAppend(t)
         go 1
         let g:evalSelLastCmd   = ""
         let g:evalSelLastCmdId = ""
@@ -171,7 +185,11 @@ fun! EvalSelectionCmdLine(lang)
         let @e = input(a:lang." (exit with ^D+Enter):\n")
         if @e == ""
             break
+        elseif @e == ""
+            let g:evalSelLastCmdId = lang
+            call EvalSelectionLog("''")
         else
+            let g:evalSelLastCmd = substitute(@e, "\n$", "", "")
             call EvalSelection_{lang}("EvalSelectionLog")
         endif
     endwh
@@ -346,6 +364,50 @@ endif
 
 command! -nargs=1 EvalSelectionQuit ruby EvalSelection.tear_down(<q-args>)
 
+fun! EvalSelectionCompleteCurrentWord(...)
+    if a:0 >= 1 && a:1 != ""
+        " call EvalSelectionCompleteCurrentWordInsert(a:1, 0)
+        exec "norm! a". a:1
+    else
+        let e = @e
+        try
+            norm! viw"ey
+            if exists("*EvalSelectionCompleteCurrentWord_". &filetype)
+                try
+                    aunmenu PopUp.EvalSelection
+                catch
+                endtry
+                call EvalSelectionCompleteCurrentWord_{&filetype}(@e)
+                popup PopUp.EvalSelection
+            else
+                echom "Unknown filetype"
+            end
+        finally
+            let @e = e
+        endtry
+    endif
+endf
+
+fun! EvalSelectionCompleteCurrentWordInsert(word, remove_menu)
+    exec "norm! viwda". a:word
+    if a:remove_menu
+        aunmenu PopUp.EvalSelection
+    endif
+endf
+
+command! -nargs=? -complete=custom,EvalSelectionGetWordCompletions 
+            \ EvalSelectionCompleteCurrentWord call EvalSelectionCompleteCurrentWord(<q-args>)
+amenu PopUp.--SepEvalSelection-- :
+amenu PopUp.Complete\ Word :EvalSelectionCompleteCurrentWord<cr>
+
+fun! EvalSelectionGetWordCompletions(ArgLead, CmdLine, CursorPos)
+    if exists("*EvalSelectionGetWordCompletions_". &filetype)
+        return EvalSelectionGetWordCompletions_{&filetype}(a:ArgLead, a:CmdLine, a:CursorPos)
+    else
+        return a:ArgLead
+    endif
+endf
+
 fun! EvalSelectionTalk(id, body)
     ruby EvalSelection.talk(VIM::evaluate("a:id"), VIM::evaluate("a:body"))
 endf
@@ -376,6 +438,108 @@ if exists("g:evalSelectionRInterpreter")
     endif
 
     ruby <<EOR
+    def escape_menu(text)
+        text.gsub(/([-. &|\\"])/, "\\\\\\1")
+        # text.gsub(/(\W)/, "\\\\\\1")
+    end
+
+    def build_vim_menu(menu_name, list, menu_function, keys={})
+        ls         = list.sort
+        menu_mode  = keys[:mode] || "a"
+        menu_max   = 30
+        menu_break = ls.size > menu_max ? ls.size / menu_max : nil
+        if menu_break
+            menu_sub = 0
+            menu_titles = []
+            for i in 0..menu_break
+                j    = i * menu_max
+                from = ls[j]
+                to   = ls[j + menu_max - 1] || ls[-1]
+                menu_titles << %{&#{escape_menu(from)}\\ \\.\\.\\ #{escape_menu(to)}.}
+            end
+            # menu_pre = menu_titles[0]
+        else
+            menu_pre = ""
+        end
+        menus = []
+        sep   = false
+        if keys[:update]
+            VIM::command(%{amenu &#{menu_name}.&Update #{keys[:update]}}) 
+            sep = true
+        end
+        if keys[:exit]
+            VIM::command(%{amenu &#{menu_name}.&Exit #{keys[:exit]}}) 
+            sep = true
+        end
+        if keys[:remove_menu]
+            VIM::command(%{amenu &#{menu_name}.&Remove\\ Menu #{keys[:remove_menu]}})
+            sep = true
+        end
+        if sep
+            VIM::command(%{amenu &#{menu_name}.-Sep#{menu_name}- :})
+        end
+        ls.each_with_index do |i, idx|
+            if menu_break and idx % menu_max == 0
+                menu_pre = menu_titles[menu_sub]
+                menu_sub += 1
+            end
+            VIM::command(%{#{menu_mode}menu &#{menu_name}.#{menu_pre}&#{escape_menu(i)} #{menu_function % i}})
+        end
+    end
+EOR
+
+    fun! EvalSelectionGetWordCompletions_r(ArgLead, CmdLine, CursorPos)
+        let ls = ""
+        ruby <<EOR
+        i = $EvalSelectionTalkers["R"]
+        if i and i.respond_to?(:complete_word)
+            ls = i.complete_word(VIM::evaluate("a:ArgLead"))
+            if ls
+                ls = ls.join("\n")
+                ls.gsub(/"/, '\\\\"')
+                VIM::command(%{let ls="#{ls}"})
+            end
+        end
+EOR
+        return ls
+    endf
+
+    fun! EvalSelectionCompleteCurrentWord_r(bit)
+        ruby <<EOR
+        i = $EvalSelectionTalkers["R"]
+        if i
+            if i.respond_to?(:complete_word)
+                ls = i.complete_word(VIM::evaluate("a:bit"))
+                if ls
+                    build_vim_menu("PopUp.EvalSelection", ls, %{:call EvalSelectionCompleteCurrentWordInsert("%s", 1)<CR>})
+                end
+            else
+                VIM::command(%Q{throw "EvalSelection: Wrong or incapable interpreter!"})
+            end
+        else
+            VIM::command(%Q{throw "EvalSelection CCW: Set up interaction with R first!"})
+        end
+EOR
+    endf
+       
+    fun! EvalSelectionBuildMenu_r()
+        ruby <<EOR
+        i = $EvalSelectionTalkers["R"]
+        if i
+            ls = i.ole_server.Evaluate(%{ls()})
+            if ls
+                # build_vim_menu("R", "i", ls, %{%s}, %{:call EvalSelectionBuildMenu_r()<CR>})
+                build_vim_menu("R", ls, %{a%s}, 
+                               :exit   => %{:EvalSelectionQuitR<CR>},
+                               :update => %{:call EvalSelectionBuildMenu_r()<CR>},
+                               :remove_menu => %{:ruby remove_menu("R")<cr>}
+                              )
+            end
+        end
+EOR
+    endf
+    
+    ruby <<EOR
     module EvalSelectionRExtra
         if VIM::evaluate("g:evalSelectionRInterpreter") =~ /Clean$/
             def postprocess(text)
@@ -396,13 +560,19 @@ EOR
             def setup
                 @iid         = "R"
                 @interpreter = "rdcom"
-                @null_cmds   = [
-                    "data",
-                    "help.search",
-                    "help",
-                ]
-                @null_cmds.collect! {|c| /^\s*#{Regexp.escape(c)}\s*\([^\n]*\)\s*$/m }
-                @null_cmds << /^\s*\?[^\n]+\s*$/m
+            end
+
+            def build_menu
+                VIM::command(%{call EvalSelectionBuildMenu_r()})
+            end
+            
+            def remove_menu
+                VIM::command(%{aunmenu R})
+            end
+            
+            def complete_word(bit)
+                bit = nil if bit == "\n"
+                @ole_server.Evaluate(%{apropos("^#{Regexp.escape(bit) if bit}")})
             end
 
             def ole_tear_down
@@ -417,6 +587,10 @@ EOR
                 return true
             end
             
+            def clean_result(text)
+                text.sub(/^\s*\[\d+\]\s*/, '')
+            end
+
             if VIM::evaluate("g:evalSelectionRInterpreter") =~ /Clean$/
                 def postprocess(result)
                     case result
@@ -427,10 +601,6 @@ EOR
                     else
                         result
                     end
-                end
-
-                def clean_result(text)
-                    text.sub(/^\[\d+\]\s*/, '')
                 end
             end
         end
@@ -459,22 +629,31 @@ EOR
                     if VIM::evaluate("has('gui')")
                         @ole_server.EvaluateNoReturn(%{options(chmhelp=TRUE)})
                         @ole_server.EvaluateNoReturn(%{EvalSelectionPager <- function(f, hd, ti, del) {
-    system(paste("cmd /c start gvim --servername GVIMPAGER --remote-silent ", gsub(" ", "\\\\ ", f)))
+    system(paste("cmd /c start #{VIM::evaluate("g:evalSelectionPager")} ", gsub(" ", "\\\\ ", f)))
     if (del) {
         Sys.sleep(5)
         unlink(f)
     }
 }})
                         @ole_server.EvaluateNoReturn(%{options(pager=EvalSelectionPager)})
+                        @ole_server.EvaluateNoReturn(%{options(show.error.messages=FALSE)})
+                    end
+                    d = VIM::evaluate(%{expand("%:p:h")})
+                    d.gsub!(/\\/, "/")
+                    @ole_server.EvaluateNoReturn(%{setwd("#{d}")})
+                    rdata = File.join(d, ".Rdata")
+                    if File.exist?(rdata)
+                        @ole_server.EvaluateNoReturn(%{sys.load.image("#{rdata}", TRUE)})
                     end
                 end
                 
                 def ole_evaluate(text)
                     @ole_server.EvaluateNoReturn(%{evalSelection.out <- textConnection("evalSelection.log", "w")})
                     @ole_server.EvaluateNoReturn(%{sink(evalSelection.out)})
-                    @ole_server.EvaluateNoReturn(%{print({#{text}})})
+                    @ole_server.EvaluateNoReturn(%{print(tryCatch({#{text}}, error=function(e) e))})
                     @ole_server.EvaluateNoReturn(%{sink()})
                     @ole_server.EvaluateNoReturn(%{close(evalSelection.out)})
+                    @ole_server.EvaluateNoReturn(%{rm(evalSelection.out)})
                     @ole_server.Evaluate(%{if (is.character(evalSelection.log) & length(evalSelection.log) == 0) NULL else evalSelection.log})
                 end
             end
@@ -536,11 +715,29 @@ if exists("g:evalSelectionSpssInterpreter")
     endif
 
     if !exists("g:evalSelectionSpssCmdLine")
+        fun! EvalSelectionRunSpssMenu(menuEntry)
+            ruby <<EOR
+            i = $EvalSelectionTalkers["SPSS"]
+            if i
+                m = VIM::evaluate("a:menuEntry")
+                i.data.InvokeDialogAndExecuteSyntax(m, 1, false)
+                # rv = i.data.InvokeDialogAndReturnSyntax(m, 1)
+                # if rv and rv != ""
+                #     exec "norm! i". rv
+                # end
+            else
+                VIM::command(%Q{throw "EvalSelection RSM: Set up interaction with SPSS first!"})
+            end
+EOR
+        endf
+        
         ruby << EOR
         require 'win32ole'
         class EvalSelectionSPSS < EvalSelectionOLE
+            attr :data
+            
             def setup
-                @iid         = VIM::evaluate("g:evalSelectionSpssInterpreter")
+                @iid         = "SPSS"
                 @interpreter = "ole"
             end
 
@@ -548,15 +745,38 @@ if exists("g:evalSelectionSpssInterpreter")
                 @ole_server = WIN32OLE.new("spss.application")
                 @output     = @ole_server.NewOutputDoc
                 @output.visible = true
+                @data       = @ole_server.NewDataDoc
+                @data.visible = true
             end
 
             def ole_tear_down
                 @ole_server.Quit
+                VIM::command(%{aunmenu SPSS})
                 return true
             end
 
             def ole_evaluate(text)
-                @ole_server.ExecuteCommands(text, true)
+                # run commands asynchronously as long as I don't know how to 
+                # retrieve the output
+                @ole_server.ExecuteCommands(text, false)
+                nil
+            end
+
+            # this doesn't quite work yet
+            def build_menu
+                menu = @data.GetMenuTable
+                for e in menu
+                    if e =~ /\>/ and !menu.any? {|m| m =~ /^#{Regexp.escape(e)}\>/}
+                        m = e.gsub(/\>/, '.')
+                        m.gsub!(/([\\ ])/, '\\\\\\1')
+                        # VIM::command(%{echom 'SPSS.#{m}'})
+                        VIM::command(%{amenu SPSS.#{m} :call EvalSelectionRunSpssMenu('#{e}')<CR>})
+                    end
+                end
+            end
+
+            def remove_menu
+                VIM::command(%{aunmenu SPSS})
             end
         end
 EOR

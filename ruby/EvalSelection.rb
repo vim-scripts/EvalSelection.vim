@@ -3,8 +3,8 @@
 # @Author:      Thomas Link (samul AT web.de)
 # @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 # @Created:     11-Mär-2004.
-# @Last Change: 13-Feb-2005.
-# @Revision:    0.244
+# @Last Change: 16-Feb-2005.
+# @Revision:    0.259
 
 # require "open3"
 
@@ -21,19 +21,37 @@ class EvalSelectionAbstractInterpreter
     end
 
     def setup 
-        raise "#setup must be overridden!"
+        raise "#setup must be overwritten!"
     end
 
+    def build_interpreter_menu
+        build_menu
+        @menu = true
+    end
+
+    def build_menu
+    end
+
+    def remove_interpreter_menu
+        if @menu
+            remove_menu
+            @menu = false
+        end
+    end
+    
+    def remove_menu
+    end
+    
     def initialize_communication
-        raise "#initialize_communication must be overridden!"
+        raise "#initialize_communication must be overwritten!"
     end
     
     def tear_down
-        raise "#tear_down must be overridden!"
+        raise "#tear_down must be overwritten!"
     end
 
     def interact(text)
-        raise "#talk must be overridden!"
+        raise "#talk must be overwritten!"
     end
     
     def talk(text)
@@ -179,6 +197,8 @@ class EvalSelectionStdInFileOut < EvalSelectionInterpreter
 end
 
 class EvalSelectionOLE < EvalSelectionAbstractInterpreter
+    attr :ole_server
+
     def initialize
         @ole_server = nil
         super
@@ -226,15 +246,15 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
     end
     
     def ole_setup
-        raise "#setup must be overridden!"
+        raise "#setup must be overwritten!"
     end
 
     def ole_tear_down
-        raise "#setup must be overridden!"
+        raise "#setup must be overwritten!"
     end
 
     def ole_evaluate(text)
-        raise "#setup must be overridden!"
+        raise "#setup must be overwritten!"
     end
 
     alias :ole_evaluate_no_return :ole_evaluate
@@ -255,7 +275,10 @@ module EvalSelection
         i = $EvalSelectionTalkers[name]
         if !i
             i = interpreterClass.new
-            $EvalSelectionTalkers[i.iid] = i if i
+            if i
+                $EvalSelectionTalkers[i.iid] = i
+                i.build_interpreter_menu
+            end
         elsif !quiet
             VIM::command(%Q{echom "EvalSelection: Interaction with #{name} already set up!"})
         end
@@ -267,8 +290,18 @@ module EvalSelection
         withId(id, :talk, text)
     end
     module_function :talk
+   
+    def remove_menu(id)
+        begin
+            withId(id, :remove_interpreter_menu)
+        rescue Exception => e
+            VIM::command(%{echom "Error when removing the menu for #{id}"})
+        end
+    end
+    module_function :remove_menu
     
     def tear_down(id)
+        remove_menu(id)
         if withId(id, :tear_down)
             $EvalSelectionTalkers[id] = nil
         else
@@ -279,8 +312,12 @@ module EvalSelection
 
     def tear_down_all
         $EvalSelectionTalkers.each do |id, interp|
-            if interp and interp.tear_down
-                $EvalSelectionTalkers[id] = nil
+            begin
+                if interp and interp.tear_down
+                    $EvalSelectionTalkers[id] = nil
+                end
+            rescue Exception => e
+                VIM::command(%{echom "Error when shutting down #{id}"})
             end
         end
     end

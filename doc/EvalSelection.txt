@@ -79,7 +79,7 @@ If ruby-support is compiled in, the following languages[1] are available too
         set g:evalSelectionOCamlInterpreter to "OCaml" or "OCamlClean"[2]
     R :: R
         set g:evalSelectionRInterpreter "R", "RClean"[2], or "RDCOM", "RDCOM 
-        Commander", "RDCOM Clean" [3, 4]
+        Commander", "RDCOM Clean" [3, 4, 5]
     S :: SPSS
         limited support (no return values), the (one-way) communication with 
         SPSS is done via OLE automation [4]
@@ -108,6 +108,9 @@ whitespace. You can get a list of available commands by sending
 "#ole_methods". Please refer to ruby's documentation of the win32ole library 
 for further details. (As a mather of fact, commands prepended by "#" refer to 
 regular ruby methods that are sent to the server object.)
+
+[5] For R, a simple minded word completion is implemented. Take a look at the 
+popup menu or run :EvalSelectionCompleteCurrentWord.
 
 
                                                     *EvalSelection-Modes*
@@ -365,6 +368,10 @@ Gets stuck when evaluating several expressions at once.
 
 
 * Version History~
+ 0.11 :: R: set working directory and load .Rdata if available, word 
+ completion, catch errors, build objects menu; SPSS: show data window, build 
+ menu; g:evalSelectionLogCommands defaults to 1; revamped log
+
  0.10 :: capture interaction with R via R(D)COM; "RDCOM" uses a 2nd instance 
  of gvim as a pager (it doesn't start RCmdr any more); "RDCOM Commander" uses 
  RCmdr; "RDCOM Clean" and "RDCOM Commander Clean" modes; take care of 
