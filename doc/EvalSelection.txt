@@ -1,9 +1,9 @@
-*EvalSelection .txt*	EvalSelection -- evaluate the visual area
+*EvalSelection.txt*	EvalSelection -- evaluate the visual area
 
 Author: Thomas Link (samul AT web de)
 
 
-* Install
+* Install~
 
 Extract the archive to your personal vimfiles directory.
 
@@ -13,10 +13,14 @@ Extract the archive to your personal vimfiles directory.
     Win32: $VIM."/vimfiles/ruby/"
     Else:  "~/.vim/ruby/"
 
+You can uninstall EvalSelection by running these commands: >
+
+    cd $HOME/.vim/
+    rm -i `cat etc/EvalSelection.lst`
 
 
                                                     *EvalSelection*
-* Description
+* Description~
 
 Evaluate source code selected in a visual region. This is useful for 
 performing small text manipulation tasks or calculations that aren't worth the 
@@ -28,28 +32,34 @@ The key bindings follow this scheme: >
 
     <Leader>e{LANGUAGE}{MODE} :: work on the visual region
     <Leader>E{LANGUAGE}{MODE} :: work on the contents of the e-register
-    <Leader>x{MODE}           :: work on the visual region (LANGUAGE = 'filetype')
+    <Leader>x{MODE}           :: work on the visual region (derives LANGUAGE 
+                                 from the buffer's 'filetype')
 
-NOTE: In the third form LANGUAGE is replaced with &filetype, which requires 
-the function EvalSelection_{&filetype}(cmd) to be defined. a:cmd is a editor 
-command that processes the result that is put in the e-register.
-    
+                                                    *EvalSelection-Language*
 LANGUAGE being one of: >
 
-    v :: vim
+    v :: vim (comments at the end of line after vim code could cause problems)
     r :: ruby (requires compiled-in ruby support)
     s :: sh (using system())
+    e :: calculator, evaluate formula (using either ruby, python, perl, tcl, 
+         or vim) [1]
 
 I haven't actually tested the following three bindings because I use 
 neither of them. Anyway, as I happen to use a Vim with +tcl, +python and 
-+perl support compiled in, I added them to the standard bindings 
-(please, let me know if you run into problems): >
++perl support compiled in, I added them to the standard bindings: >
 
     y :: python (requires compiled-in python support)
     p :: perl (requires compiled-in perl support)
     t :: tcl (requires compiled-in tcl support)
 
-!!!experimental feature!!!                          *EvalSelection-ExtKeyBindings*
+[1] This can be used to evaluate formulas like "1+2=" and append (or replace 
+it with) the result. How the formula is precisely interpreted depends on the 
+interpreter being used. Some interpreters like vim know only integer numbers 
+and the most basic operators. Which interpreter is being used, depends on your 
+vim's compiled in language support. Check out |feature-list|, |has()|, and 
+|:version|.
+
+                                                    *EvalSelection-ExtKeyBindings*
 If ruby-support is compiled in, the following languages[1] are available too 
 (but see |EvalSelection-Interaction| below): >
     
@@ -60,35 +70,55 @@ If ruby-support is compiled in, the following languages[1] are available too
     o :: ocaml
         set g:evalSelectionOCamlInterpreter to "OCaml" or "OCamlClean"[2]
     R :: R
-        set g:evalSelectionRInterpreter "R" or "RClean"[2]
+        set g:evalSelectionRInterpreter "R", "RClean"[2], or "RDCOM" [3, 4]
+    S :: SPSS
+        limited support (no return values), the (one-way) communication with 
+        SPSS is done via OLE automation [4]
 
-[1] This is hardly tested. Some of them work better, some worse. They are 
-mainly test cases for experimenting with different ways of handling 
-interaction with the restrictions of win32 Ruby. With some interpreters vim 
-appears to get stuck when you try to evaluate multiple commands at once or 
-multi-line commands -- you have to kill the interpreter/subprocess then. With 
-other interpreters, this isn't an issue.
+[1] This feature is experimental. The quality and reliability of the 
+interaction with the interpreters varies. Some of them are mainly test cases 
+for experimenting with different ways of handling interaction with the 
+restrictions of win32 Ruby. With some interpreters vim appears to get stuck 
+when you try to evaluate multiple commands at once or multi-line commands -- 
+you have to kill the interpreter/subprocess then. With other interpreters, 
+this isn't an issue.
+
 [2] "*Clean" means that the output is stripped of superfluous information.
 
-In order to enable the interaction with an interpreter, you usually have to 
-set the variable g:evalSelection{LANG}Interpreter to the appropriate value and make 
-g:evalSelection{LANG}CmdLine point to the right location.
+[3] This requires the R(D)COM extension, the Rcmdr and its libraries to be 
+installed and works only under windows (I assume). The problem with this 
+approach is that the COM server has no notion of a REPL, which is why the 
+output in the log represents the data as "it is" and not as printed on the 
+REPL. Anyway, the interaction is mirrored in the RCommander window, which 
+works quite well if switching between windows appears acceptable to you.
 
+[4] When interacting with an interpreter via OLE, you can send COM commands by 
+prepending the argument with a "#" sign. Arguments are separated by 
+whitespace. You can get a list of available commands by sending 
+"#ole_methods". Please refer to ruby's documentation of the win32ole library 
+for further details. (As a mather of fact, commands prepended by "#" refer to 
+regular ruby methods that are sent to the server object.)
+
+In order to enable the interaction with an interpreter, you usually have to 
+set the variable g:evalSelection{LANG}Interpreter to the appropriate value and 
+make g:evalSelection{LANG}CmdLine point to the right location.
+
+                                                    *EvalSelection-Modes*
 MODE being one of: >
 
     x :: just evaluate and put the result in the e-register
-    e :: now, the same as x
+    e :: the same as x
     p :: echo/print the result on the command line
     a :: append the result to visual region
     r :: replace visual region with the result
     l :: insert the result in a temporary interaction log
 
-You usually have to print a result in order to use it. E.g. in ruby, if 
-you want to insert the result of, say, 15.3/24.0 in the text, you have 
-to type "p 15.3/24.0", select the text, and type <Leader>err. This will 
-replace the visual/selected area with the printed output. I said 
-"usually" because the behaviour differs slightly from language to 
-language.
+You usually have to print a result in order to use it. E.g. in ruby, if you 
+want to insert the result of, say, 15.3/24.0 in the text, you have to type "p 
+15.3/24.0", select the text, and type <Leader>err. This will replace the 
+visual/selected area with the printed output. I said "usually" because the 
+behaviour differs slightly from language to language. It's not necessary to 
+print the result when using the calculator (e shortcut: <Leader>eer).
 
 Define g:evalSelectionLeader, g:evalSelectionRegisterLeader, and 
 g:evalSelectionAutoLeader for using different mapping prefixes.
@@ -96,7 +126,7 @@ g:evalSelectionAutoLeader for using different mapping prefixes.
 NOTE: The e-register is overwritten with the result of an evaluation.
 
 
-** Commands
+** Commands~
 
     EvalSelectionCmdLine LANG :: Simulate a command line for LANG (quit 
     with empty input); due to the primitive handling of input/output, 
@@ -107,13 +137,13 @@ NOTE: The e-register is overwritten with the result of an evaluation.
     EvalSelectionSetup{LANG}  :: Set up interaction with external interpreter 
     (but see below)
 
-    EvalSelectionSayQuit INTERPRETER :: Quit interaction with an 
+    EvalSelectionQuit INTERPRETER :: Quit interaction with an 
     external interpreter
 
 LANG and INTERPRETER are (most of the time) case sensitive.
 
 
-** Variables
+** Variables~
 
     - g:evalSelectionLogCommands (default: 0)  
     If true, also log the command -- otherwise log the results only.
@@ -128,7 +158,12 @@ LANG and INTERPRETER are (most of the time) case sensitive.
 
 
                                                     *EvalSelection-Interaction*
-* Interaction With An External Interpreter
+* Interaction With An External Interpreter~
+
+The interaction with external interpreters uses ruby's IO.popen. To my 
+knowledge, there is no under way to do this on MS Windows -- without having to 
+compile an extra extension for ruby. For unix (like) systems, there are 
+probably better solutions around.
 
 Don't expect this to work reliable and without some finetuning. Some 
 interpreters make trouble when evaluating several expressions at once or 
@@ -143,14 +178,17 @@ In order to interact with an interpreter, you have to:
 
     1. call :EvalSelectionSetup{LANG}
        (e.g. :EvalSelectionSetupLisp)
-    2. in order to send commands to the interpreter use the appropriate shortcuts
+    2. in order to send commands to the interpreter use the appropriate 
+       shortcuts
        or the function EvalSelection_{lang}(cmd)
           (e.g. "ey:call EvalSelection_lisp("echomsg"))
        or the command :EvalSelectionCmdLine {LANG}
           (e.g. :EvalSelectionCmdLine Lisp)
-    3. call :EvalSelectionSayQuit {INTERPRETER} (e.g. 
-       :EvalSelectionSayQuit  CLisp) when finished
+    3. call :EvalSelectionQuit{LANG} or :EvalSelectionQuit {INTERPRETER} (e.g.  
+       :EvalSelectionQuit CLisp) when finished
 
+
+[The following is slightly outdated.]
 To set up interaction with a new interpreter you have to define (in ruby) 
 a class deriving from EvalSelectionInterpreter. In the method "setup", 
 you should define some of the following object variables:
@@ -202,13 +240,12 @@ If you know of a better solution that is easy to implement, please let me
 know.
 
 
-* Tests
+* Tests~
 
 Mark some code as a visual region, and type the appropriate shortcuts.
 
 
-** Vim
-
+** Vim [v]~
  1. fun! TwoTimes(a)
         return a:a * 2
     endfun
@@ -225,8 +262,7 @@ Mark some code as a visual region, and type the appropriate shortcuts.
  4. echo 1 + 1
  
     
-** Ruby
-
+** Ruby [r]~
  1. def TwoTimes(a)
         return a*2
     end
@@ -239,8 +275,7 @@ Mark some code as a visual region, and type the appropriate shortcuts.
     p factor * 20
 
 
-** Python
-
+** Python (not indented :-) [y]~
 1. 
 print(1+1)
 2. 
@@ -249,13 +284,11 @@ def twoTimes(a):
 print twoTimes(2)
 
 
-** Perl
-
+** Perl [p]~
  1. VIM::Msg("Foo");
 
 
-** Tcl
-
+** Tcl [t]~
  1. puts [expr 1 + 1]
  2. Adapted from the tcl help page
     proc date {} {
@@ -264,15 +297,19 @@ print twoTimes(2)
     puts [date]
 
 
-** Bash
+** Calculator [e]~
+ 1. 1+2
+ 2. 1+3.4=
+ 3. 1.2+3.4=
 
- 1. export x=/tmp; ls $x 
- 2. export x=/tmp
+
+** Bash [s]~
+ 1. export x=/tmp; ls $x
+ 2. export x=/bin
     ls $x
 
 
-** OCaml
-
+** OCaml [o]~
  1. 1 + 1;;
  2. let a = 1 in
     a + 2;;
@@ -280,8 +317,7 @@ print twoTimes(2)
     let y = x * 3;;
     print_int y;;
     
-** Scheme
-
+** Scheme [c]~
  1. (display "a")
     (+ 1 1)
  2. (display "a")
@@ -289,7 +325,7 @@ print twoTimes(2)
       (* a 2))
 
 
-** Lisp
+** Lisp [l]~
 Gets stuck when evaluating several expressions at once.
 
  1. (+ 1 1)
@@ -297,8 +333,7 @@ Gets stuck when evaluating several expressions at once.
       (* a 2))
 
 
-** R
-
+** R [R]~
  1. 1 + 1
 
  2. for (x in 25:30) 
@@ -313,12 +348,14 @@ Gets stuck when evaluating several expressions at once.
     summary(lm(rating ~ complaints, data=attitude))
 
 
-* Problems
+* Problems~
 - Vim sometimes hangs or crashes (@WinXP) when talking to an external 
   interpreter
 
 
-* Version History
+* Version History~
+ 0.9 :: support for communication via win32 COM/OLE (R, SPSS); general 
+   calculator shortcuts
  0.8 :: improved interaction with external interpreters (it's still not really 
    usable but it's getting better); reunified EvalSelection.vim and 
    EvalSelectionRuby.vim
@@ -330,5 +367,5 @@ Gets stuck when evaluating several expressions at once.
    EvalSelectionCmdLine (CLI like interaction)
  0.5 :: Initial Release
 
- vim: fdl=1:ff=unix:tw=78
 
+ vim: fdl=1:tw=78
