@@ -3,9 +3,10 @@
 # @Author:      Thomas Link (samul AT web.de)
 # @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 # @Created:     11-Mär-2004.
-# @Last Change: 02-Mai-2004.
-# @Revision:    0.38
+# @Last Change: 05-Mai-2004.
+# @Revision:    0.95
 
+# require "open3"
 
 $EvalSelectionTalkers = Hash.new
 
@@ -13,7 +14,9 @@ class EvalSelectionInterpreter # {{{2
     attr :iid
     
     def initialize
-        @io          = nil
+        @ioIn        = nil
+        @ioOut       = nil
+        @ioErr       = nil
         @iid         = ""
         @interpreter = nil # The command-line to start the interpreter
         @printFn     = nil # The function that prints %{BODY}'s result and a record marker
@@ -28,9 +31,7 @@ class EvalSelectionInterpreter # {{{2
         @postProcess = nil # A block that post-processes the resulting string 
                            # and returns the real result
         setup
-        if !(@recEndChar || @recPromptRx)
-            raise "Either @recEndChar or @recPromptRx must be non-nil!"
-        end
+        raise "Either @recEndChar or @recPromptRx must be non-nil!" unless (@recEndChar || @recPromptRx)
     end
     
     def setup #{{{3
@@ -38,21 +39,20 @@ class EvalSelectionInterpreter # {{{2
     end
 
     def sayHi #{{{3
-        if !@io
-            @io      = IO.popen(@interpreter, File::RDWR)
-            @io.sync = true
-            if @bannerEndRx || @recSkip > 0
-                listen(true)
-            end
-            return @io != nil
+        unless @ioIn
+            # there is no popen3 under Windows
+            # @ioIn, @ioOut, @ioErr = Open3.popen3(@interpreter)
+            @ioIn = @ioOut = IO.popen(@interpreter, File::RDWR)
+            listen(true) if @bannerEndRx or @recSkip > 0
+            return @ioIn != nil
         end
     end
     
     def sayBye #{{{3
-        if @io
-            @io.puts(@quitFn)
-            @io.close
-            @io = nil
+        if @ioOut
+            @ioOut.puts(@quitFn)
+            @ioOut.close
+            @ioIn = @ioOut = @ioErr = nil
         end
     end
     
@@ -60,10 +60,8 @@ class EvalSelectionInterpreter # {{{2
         #+++ use look back rx
         pr = @printFn.gsub(/(^|[^%])%\{BODY\}/, "\\1#{body}")
         pr.gsub!(/%%/, "%")
-        @io.puts(pr)
-        if @markFn
-            @io.puts(@markFn)
-        end
+        pr += @markFn if @markFn
+        @ioOut.puts(pr)
     end
 
     def listen(atStartup=false) #{{{3
@@ -81,7 +79,7 @@ class EvalSelectionInterpreter # {{{2
             ign       = @useNthRec
             recMarkRx = @recMarkRx
         end
-        if @recPromptRx || recMarkRx
+        if @recPromptRx or recMarkRx
             markRx = /#{(recMarkRx || "") + (@recPromptRx || "")}$/
         else
             markRx = nil
@@ -89,27 +87,26 @@ class EvalSelectionInterpreter # {{{2
         if ign < 0
             return ""
         else
+            # VIM::command(%{echomsg "#{markRx.inspect}"})
             while ign >= 0
                 ign -= 1
                 l    = ""
-                while !@io.eof
-                    c = @io.getc()
-                    if @recEndChar && c == @recEndChar
+                until @ioIn.eof
+                    c = @ioIn.getc()
+                    if @recEndChar and c == @recEndChar
                         break
                     else
                         l << c
-                        if markRx && l =~ markRx
+                        # VIM::command(%{echomsg "#{l}"})
+                        if markRx and l =~ markRx
                             l.sub!(markRx, "")
                             break
                         end
                     end
                 end
             end
-            if @postProcess
-                return @postProcess.call(l)
-            else
-                return l
-            end
+            l = @postProcess.call(l) if @postProcess
+            return l
         end
     end
 
@@ -120,21 +117,14 @@ class EvalSelectionInterpreter # {{{2
         VIM::command(%Q{let g:evalSelLastCmd   = "#{blabber}"})
         VIM::command(%Q{let g:evalSelLastCmdId = "#{@iid}"})
         # p listen().gsub(/(["])/, "'")
-        print listen()
+        for i in listen()
+            puts i
+        end
     end
 end
 
 module EvalSelection
-    def EvalSelectionSetup(interpreterClass) # {{{2
-        i = $EvalSelectionTalkers[id] || interpreterClass.new
-        ok = i.sayHi
-        if ok
-            $EvalSelectionTalkers[i.iid] = i
-        end
-        return ok
-    end
-
-    def EvalSelectionWithId(id, *args) # {{{2
+    def withId(id, *args) # {{{2
         i = $EvalSelectionTalkers[id]
         if i
             i.send(*args)
@@ -142,14 +132,25 @@ module EvalSelection
             VIM::command(%Q{throw "EvalSelectionTalk: Set up interaction with #{@iid} first!"})
         end
     end
-
-    def EvalSelectionSayQuit(id) # {{{2
-        EvalSelectionWithId(id, :sayBye)
+    module_function :withId
+    
+    def setup(interpreterClass) # {{{2
+        i  = $EvalSelectionTalkers[id] || interpreterClass.new
+        ok = i.sayHi
+        $EvalSelectionTalkers[i.iid] = i if ok
+        return ok
     end
+    module_function :setup
 
-    def EvalSelectionTalk(id, blabla) # {{{2
-        EvalSelectionWithId(id, :talk, blabla)
+    def sayQuit(id) # {{{2
+        withId(id, :sayBye)
     end
+    module_function :sayQuit
+
+    def talk(id, blabla) # {{{2
+        withId(id, :talk, blabla)
+    end
+    module_function :talk
 end
 
 # vim: ff=unix

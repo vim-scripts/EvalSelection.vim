@@ -273,15 +273,19 @@ print twoTimes(2)
 
 ** OCaml
 
- 1. 1 + 1
+ 1. 1 + 1;;
  2. let a = 1 in
-    a + 2
-
+    a + 2;;
+ 3. let x = let a b = b*2 in a 3;;
+    let y = x * 3;;
+    print_int y;;
     
 ** Scheme
 
- 1. (+ 1 1)
- 2. (let ((a 2))
+ 1. (display "a")
+    (+ 1 1)
+ 2. (display "a")
+    (let ((a 2))
       (* a 2))
 
 
@@ -304,16 +308,27 @@ Gets stuck when evaluating several expressions at once.
     x = factor(x)
     x
 
+ 4. data(attitude)
+    summary(attitude)
+    summary(lm(rating ~ complaints, data=attitude))
+
+
+* Problems
+- Vim sometimes hangs or crashes (@WinXP) when talking to an external 
+  interpreter
+
 
 * Version History
- 
- 0.7 :: Improved interaction (e.g., multi-line commands in R); moved 
-   code depending on +ruby to EvalSelectionRuby.vim (thanks to Grant 
-   Bowman for pointing out this problem); saved all files in unix 
-   format; added python, perl, and tcl (I can't tell if they work)
+ 0.8 :: improved interaction with external interpreters (it's still not really 
+   usable but it's getting better); reunified EvalSelection.vim and 
+   EvalSelectionRuby.vim
+ 0.7 :: Improved interaction (e.g., multi-line commands in R); moved code 
+   depending on +ruby to EvalSelectionRuby.vim (thanks to Grant Bowman for 
+   pointing out this problem); saved all files in unix format; added python, 
+   perl, and tcl (I can't tell if they work)
  0.6 :: Interaction with interpreters; separated logs; use of redir; 
    EvalSelectionCmdLine (CLI like interaction)
  0.5 :: Initial Release
 
- vim: fdl=1:ff=unix
+ vim: fdl=1:ff=unix:tw=78
 
