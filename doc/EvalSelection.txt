@@ -42,6 +42,9 @@ The key bindings follow this scheme: >
     <Leader>E{LANGUAGE}{MODE} :: work on the contents of the e-register
     <Leader>x{MODE}           :: work on the visual region (derives LANGUAGE 
                                  from the buffer's 'filetype')
+    <Leader>r                 :: for SPSS and R, this evaluates the current 
+                                 statement of paragraph (|ip| for R, $(v) for 
+                                 SPSS)
 
                                                     *EvalSelection-Language*
 LANGUAGE being one of: >
@@ -83,6 +86,8 @@ If ruby-support is compiled in, the following languages[1] are available too
     S :: SPSS
         limited support (no return values), the (one-way) communication with 
         SPSS is done via OLE automation [4]
+            - Set g:evalSelection_SPSS_DraftOutput to 1 if you prefer a draft 
+              document for output.
 
 In order to enable the interaction with an interpreter, you usually have to 
 set the variable g:evalSelection{LANG}Interpreter to the appropriate value and 
@@ -169,14 +174,15 @@ LANG and INTERPRETER are (most of the time) case sensitive.
                                                     *EvalSelection-Interaction*
 * Interaction With An External Interpreter~
 
-The interaction with external interpreters uses ruby's IO.popen. To my 
+The interaction with external interpreters usually uses ruby's IO.popen. To my 
 knowledge, there is no under way to do this on MS Windows -- without having to 
 compile an extra extension for ruby. For unix (like) systems, there are 
-probably better solutions around.
+probably better solutions around. Some interpreters (e.g. R, SPSS) communicate 
+via OLE/COM which works quite reliable.
 
-Don't expect this to work reliable and without some finetuning. Some 
-interpreters make trouble when evaluating several expressions at once or 
-multiline expressions.
+Communication via popen is fragile. Don't expect this to work reliable and 
+without some finetuning. Some interpreters make trouble when evaluating 
+several expressions at once or multiline expressions.
 
 EvalSelection usually waits for a break character or break string to 
 occur and then stops reading the interpreters output. If this doesn't 
@@ -196,8 +202,17 @@ In order to interact with an interpreter, you have to:
     3. call :EvalSelectionQuit{LANG} or :EvalSelectionQuit {INTERPRETER} (e.g.  
        :EvalSelectionQuit CLisp) when finished
 
+You can also setup a function that will be called after calling the 
+appropriate setup or teardown command. E.g., when using SPSS, I like having 
+the "Analyse" ("Analysieren" in German) menu separated from the main menu: >
 
-[The following is slightly outdated.]
+    fun! EvalSelectionPostSetup_SPSS()
+        tearoff SPSS\ Syntax.Analysieren
+    endf
+
+
+** Interaction via IO.popen()
+
 To set up interaction with a new interpreter you have to define (in ruby) 
 a class deriving from EvalSelectionInterpreter. In the method "setup", 
 you should define some of the following object variables:
@@ -362,12 +377,18 @@ Gets stuck when evaluating several expressions at once.
     }
     x(3)
 
+
 * Problems~
 - Vim sometimes hangs or crashes (@WinXP) when talking to an external 
   interpreter
 
 
 * Version History~
+ 0.14 :: Fixed some menu-related problems; <LocalLeader>r shortkey for SPSS 
+ and R (work similarly to ctrl-r in the spss editor); display a more useful 
+ error message when communication via OLE goes wrong; possibility to save the 
+ interaction log; post setup & tear down hooks for external interpreters
+
  0.11 :: R: set working directory and load .Rdata if available, word 
  completion, catch errors, build objects menu; SPSS: show data window, build 
  menu; g:evalSelectionLogCommands defaults to 1; revamped log

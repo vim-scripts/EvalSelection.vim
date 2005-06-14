@@ -3,8 +3,8 @@
 # @Author:      Thomas Link (samul AT web.de)
 # @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 # @Created:     11-Mär-2004.
-# @Last Change: 16-Feb-2005.
-# @Revision:    0.259
+# @Last Change: 04-Mai-2005.
+# @Revision:    0.320
 
 # require "open3"
 
@@ -16,6 +16,8 @@ class EvalSelectionAbstractInterpreter
     
     def initialize
         @iid    = ""
+        @menu   = false
+        @menu_entries = []
         setup
         @active = initialize_communication
     end
@@ -24,22 +26,72 @@ class EvalSelectionAbstractInterpreter
         raise "#setup must be overwritten!"
     end
 
-    def build_interpreter_menu
-        build_menu
-        @menu = true
-    end
-
-    def build_menu
-    end
-
-    def remove_interpreter_menu
-        if @menu
-            remove_menu
-            @menu = false
+    def build_vim_menu(menu_name, list, menu_function, keys={})
+        if VIM::evaluate(%{has("menu")})
+            extra_menu = keys[:extra]
+            remove_menu unless extra_menu
+            ls         = list.sort
+            menu_mode  = keys[:mode] || "a"
+            menu_max   = VIM::evaluate(%{g:evalSelectionMenuSize}).to_i
+            menu_break = ls.size > menu_max ? ls.size / menu_max : nil
+            if menu_break
+                menu_sub = 0
+                menu_titles = []
+                for i in 0..menu_break
+                    j    = i * menu_max
+                    from = ls[j]
+                    to   = ls[j + menu_max - 1] || ls[-1]
+                    menu_titles << %{&#{escape_menu(from)}\\ \\.\\.\\ #{escape_menu(to)}.}
+                end
+                    # menu_pre = menu_titles[0]
+            else
+                menu_pre = ""
+            end
+            menus = []
+            sep   = false
+            if keys[:update]
+                VIM::command(%{amenu &#{menu_name}.&Update #{keys[:update]}}) 
+                sep = true
+            end
+            if keys[:exit]
+                VIM::command(%{amenu &#{menu_name}.&Exit #{keys[:exit]}}) 
+                sep = true
+            end
+            if keys[:remove_menu]
+                VIM::command(%{amenu &#{menu_name}.&Remove\\ Menu #{keys[:remove_menu]}})
+                sep = true
+            end
+            if sep
+                VIM::command(%{amenu &#{menu_name}.-Sep#{menu_name}- :})
+            end
+            ls.each_with_index do |i, idx|
+                if menu_break and idx % menu_max == 0
+                    menu_pre = menu_titles[menu_sub]
+                    menu_sub += 1
+                end
+                VIM::command(%{#{menu_mode}menu &#{menu_name}.#{menu_pre}&#{escape_menu(i)} #{menu_function.call(i)}})
+            end
+            @menu = true
+            @menu_entries << menu_name unless extra_menu
         end
     end
     
+    def build_menu(initial=false)
+    end
+
     def remove_menu
+        if @menu and VIM::evaluate(%{has("menu")})
+            @menu_entries.each do |e|
+                # DBG begin
+                    # VIM::command(":aunmenu #{e.gsub(/\\/, "\\\\\\\\"}}")
+                    # VIM::command(%{:echom "Remove menu for: #{e}"})
+                    VIM::command(%{:aunmenu #{e}})
+                # rescue
+                # end
+            end
+            @menu = false
+            @menu_entries = []
+        end
     end
     
     def initialize_communication
@@ -102,11 +154,14 @@ class EvalSelectionInterpreter < EvalSelectionAbstractInterpreter
     
     def tear_down 
         if @ioOut
-            @ioOut.puts(@quitFn)
-            @ioOut.close
+            begin
+                @ioOut.puts(@quitFn)
+                @ioOut.close
+            rescue
+            end
             @ioIn = @ioOut = @ioErr = nil
         end
-        return @ioOut
+        return !@ioOut
     end
     
     def interact(text)
@@ -124,9 +179,6 @@ class EvalSelectionInterpreter < EvalSelectionAbstractInterpreter
     end
 
     def listen(atStartup=false)
-        unless (@recEndChar || @recPromptRx)
-            raise "Either @recEndChar or @recPromptRx must be non-nil!"
-        end
         if atStartup
             if @bannerEndRx
                 recMarkRx = @bannerEndRx
@@ -140,6 +192,9 @@ class EvalSelectionInterpreter < EvalSelectionAbstractInterpreter
         else
             ign       = @useNthRec
             recMarkRx = @recMarkRx
+        end
+        unless (@recEndChar || @recPromptRx || recMarkRx)
+            raise "Either @recEndChar, @recMarkRx, or @recPromptRx must be non-nil!"
         end
         if @recPromptRx or recMarkRx
             markRx = /#{(recMarkRx || "") + (@recPromptRx || "")}$/
@@ -214,8 +269,16 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
         if m
             args = [m[1]]
             text = m[2]
-            while (m = /^(\s+("(\\"|[^"])*"|\S+))/.match(text))
-                args << m[2]
+            while (m = /^(\s+("(\\"|[^"])*"|([0-9]+)|(\S+)))/.match(text))
+                if m[3]
+                    args << m[3]
+                elsif m[4]
+                    args << m[4].to_i
+                elsif m[5]
+                    args << m[5]
+                else
+                    raise "EvalSelection: Parse error: #{text}"
+                end
                 text = m.post_match
             end
             if text.nil? or text.empty?
@@ -224,7 +287,15 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
                 raise "EvalSelection: Parse error: #{text}"
             end
         else
-            rv = postprocess(ole_evaluate(text))
+            begin
+                rv = postprocess(ole_evaluate(text))
+            rescue WIN32OLERuntimeError => e
+                VIM::command(%{echohl Error})
+                for l in e.to_s
+                    VIM::command(%{echo "#{l.gsub(/"/, '\\\\"')}"})
+                end
+                VIM::command(%{echohl None})
+            end
         end
         if rv.kind_of?(Array)
             rv.shift if rv.first == ""
@@ -261,6 +332,8 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
 end
 
 module EvalSelection
+    module_function
+
     def withId(id, *args)
         i = $EvalSelectionTalkers[id]
         if i
@@ -269,7 +342,6 @@ module EvalSelection
             VIM::command(%Q{throw "EvalSelectionTalk: Set up interaction with #{id} first!"})
         end
     end
-    module_function :withId
     
     def setup(name, interpreterClass, quiet=false)
         i = $EvalSelectionTalkers[name]
@@ -277,38 +349,32 @@ module EvalSelection
             i = interpreterClass.new
             if i
                 $EvalSelectionTalkers[i.iid] = i
-                i.build_interpreter_menu
+                i.build_menu(true)
+            end
+            if VIM::evaluate(%{exists("*EvalSelectionPostSetup_#{name}")}) == "1"
+                VIM::command(%{call EvalSelectionPostSetup_#{name}()})
             end
         elsif !quiet
             VIM::command(%Q{echom "EvalSelection: Interaction with #{name} already set up!"})
         end
         return i
     end
-    module_function :setup
 
     def talk(id, text) 
         withId(id, :talk, text)
     end
-    module_function :talk
    
-    def remove_menu(id)
-        begin
-            withId(id, :remove_interpreter_menu)
-        rescue Exception => e
-            VIM::command(%{echom "Error when removing the menu for #{id}"})
-        end
-    end
-    module_function :remove_menu
-    
     def tear_down(id)
         remove_menu(id)
         if withId(id, :tear_down)
             $EvalSelectionTalkers[id] = nil
+            if VIM::evaluate(%{exists("*EvalSelectionPostTearDown_#{name}")}) == "1"
+                VIM::command(%{call EvalSelectionPostTearDown_#{name}())})
+            end
         else
             VIM::command(%Q{throw "EvalSelection: Can't stop #{id}!"})
         end
     end
-    module_function :tear_down
 
     def tear_down_all
         $EvalSelectionTalkers.each do |id, interp|
@@ -321,7 +387,31 @@ module EvalSelection
             end
         end
     end
-    module_function :tear_down_all
+
+    def remove_menu(id)
+        begin
+            withId(id, :remove_menu)
+        rescue Exception => e
+            VIM::command(%{echom "Error when removing the menu for #{id}"})
+        end
+    end
+    
+    def build_menu(id)
+        begin
+            withId(id, :build_menu)
+        rescue Exception => e
+            VIM::command(%{echom "Error when building the menu for #{id}"})
+        end
+    end
+
+    def update_menu(id)
+        begin
+            remove_menu(id)
+            build_menu(id)
+        rescue Exception => e
+            VIM::command(%{echom "Error when updating the menu for #{id}"})
+        end
+    end
 end
 
 # vim: ff=unix
