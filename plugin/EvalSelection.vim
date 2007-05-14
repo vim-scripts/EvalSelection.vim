@@ -1,9 +1,9 @@
 " EvalSelection.vim -- evaluate selected vim/ruby/... code
 " @Author:      Thomas Link (samul AT web.de)
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
-" @Created:     29-Jän-2004.
-" @Last Change: 01-Jun-2005.
-" @Revision:    0.14.813
+" @Created:     29-JÃ¤n-2004.
+" @Last Change: 2007-05-14.
+" @Revision:    0.14.840
 " 
 " vimscript #889
 " 
@@ -97,6 +97,14 @@ fun! EvalSelectionSystem(txt) "{{{3
     let rv=system(a:txt)
     return substitute(rv, "\n\\+$", "", "")
 endf
+
+fun! EvalSelectionEcho(txt, ...)
+    " echo "\r"
+    redraw
+    exec "echo ". a:txt
+endf
+
+command! -nargs=* EvalSelectionEcho call EvalSelectionEcho(<q-args>)
 
 fun! <SID>EvalSelectionLogAppend(txt, ...) "{{{3
     " If we search for ^@ right away, we will get a *corrupted* viminfo-file 
@@ -394,18 +402,20 @@ if !has("ruby") "{{{2
     finish
 endif
 
+let s:windows = has("win32") || has("win64") || has("win16")
 
 """ Parameters {{{1
 if !exists("g:evalSelectionRubyDir") "{{{2
-    if has("win32")
-        if exists('$HOME')
-            let g:evalSelectionRubyDir = $HOME."/vimfiles/ruby/"
-        else
-            let g:evalSelectionRubyDir = $VIM."/vimfiles/ruby/"
-        endif
-    else
-        let g:evalSelectionRubyDir = "~/.vim/ruby/"
-    endif
+    let g:evalSelectionRubyDir = ""
+    " if s:windows
+    "     if exists('$HOME')
+    "         let g:evalSelectionRubyDir = $HOME."/vimfiles/ruby/"
+    "     else
+    "         let g:evalSelectionRubyDir = $VIM."/vimfiles/ruby/"
+    "     endif
+    " else
+    "     let g:evalSelectionRubyDir = "~/.vim/ruby/"
+    " endif
 endif
 
 
@@ -463,11 +473,19 @@ fun! EvalSelectionGetWordCompletions(ArgLead, CmdLine, CursorPos) "{{{3
 endf
 
 fun! EvalSelectionTalk(id, body) "{{{3
-    ruby EvalSelection.talk(VIM::evaluate("a:id"), VIM::evaluate("a:body"))
+    " let id   = escape(a:id, '"\')
+    " let body = escape(a:body, '"\')
+    let id   = escape(a:id, '\')
+    let body = escape(a:body, '\')
+    ruby EvalSelection.talk(VIM::evaluate("id"), VIM::evaluate("body"))
 endf
 
 try
-    exec "rubyfile ".g:evalSelectionRubyDir."EvalSelection.rb"
+    if empty(g:evalSelectionRubyDir)
+        exec "rubyfile ". findfile('ruby/EvalSelection.rb', &rtp)
+    else
+        exec "rubyfile ".g:evalSelectionRubyDir."EvalSelection.rb"
+    endif
 catch /EvalSelection.rb/
     echom 'Please redefine g:evalSelectionRubyDir: '. g:evalSelectionRubyDir
 endtry
@@ -515,9 +533,9 @@ EOR
     command! EvalSelectionQuitLisp  ruby EvalSelection.tear_down(VIM::evaluate("g:evalSelectionLispInterpreter"))
     command! EvalSelectionCmdLineLisp call EvalSelectionCmdLine("lisp")
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."Lisp:\\ Setup :EvalSelectionSetupLisp<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Lisp:\\ Command\\ Line :EvalSelectionCmdLineLisp<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Lisp:\\ Quit  :EvalSelectionQuitLisp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Lisp.Setup :EvalSelectionSetupLisp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Lisp.Command\\ Line :EvalSelectionCmdLineLisp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Lisp.Quit  :EvalSelectionQuitLisp<cr>"
     end
 endif
 
@@ -541,9 +559,9 @@ if exists("g:evalSelectionOCamlInterpreter") "{{{2
     command! EvalSelectionQuitOCaml    ruby EvalSelection.tear_down("OCaml")
     command! EvalSelectionCmdLineOCaml call EvalSelectionCmdLine("ocaml")
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."OCaml:\\ Setup :EvalSelectionSetupOCaml<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."OCaml:\\ Command\\ Line :EvalSelectionCmdLineOCaml<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."OCaml:\\ Quit  :EvalSelectionQuitOCaml<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."OCaml.Setup :EvalSelectionSetupOCaml<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."OCaml.Command\\ Line :EvalSelectionCmdLineOCaml<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."OCaml.Quit  :EvalSelectionQuitOCaml<cr>"
     end
 
     ruby << EOR
@@ -604,9 +622,9 @@ EOR
     command! EvalSelectionQuitPhp  ruby EvalSelection.tear_down(VIM::evaluate("g:evalSelectionPhpInterpreter"))
     command! EvalSelectionCmdLinePhp call EvalSelectionCmdLine("php")
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."Php:\\ Setup :EvalSelectionSetupPhp<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Php:\\ Command\\ Line :EvalSelectionCmdLinePhp<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Php:\\ Quit  :EvalSelectionQuitPhp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Php.Setup :EvalSelectionSetupPhp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Php.Command\\ Line :EvalSelectionCmdLinePhp<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Php.Quit  :EvalSelectionQuitPhp<cr>"
     end
 endif
 
@@ -614,7 +632,7 @@ endif
 " R
 if exists("g:evalSelectionRInterpreter") "{{{2
     if !exists("g:evalSelectionRCmdLine")
-        if has("win32")
+        if s:windows
             let g:evalSelectionRCmdLine = 'Rterm.exe --no-save --vanilla --ess'
         else
             let g:evalSelectionRCmdLine = 'R --no-save --vanilla --ess'
@@ -626,9 +644,9 @@ if exists("g:evalSelectionRInterpreter") "{{{2
     command! EvalSelectionCmdLineR call EvalSelectionCmdLine("r")
     autocmd FileType r call EvalSelectionParagraphMappings(1)
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."R:\\ Setup :EvalSelectionSetupR<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."R:\\ Command\\ Line :EvalSelectionCmdLineR<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."R:\\ Quit  :EvalSelectionQuitR<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."R.Setup :EvalSelectionSetupR<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."R.Command\\ Line :EvalSelectionCmdLineR<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."R.Quit  :EvalSelectionQuitR<cr>"
     end
 
     fun! EvalSelection_r(cmd) "{{{3
@@ -696,7 +714,7 @@ EOR
         end
     end
 EOR
-    if g:evalSelectionRInterpreter =~ '^RDCOM'
+    if g:evalSelectionRInterpreter =~ '^RDCOM' && s:windows
         ruby << EOR
         require 'win32ole'
         require 'tmpdir'
@@ -764,7 +782,9 @@ EOR
                 end
                 
                 def ole_evaluate(text)
-                    @ole_server.Evaluate(%{capture.output(doItAndPrint("#{text.gsub(/"/, '\\\\"')}"))})
+                    text.gsub!(/"/, '\\\\"')
+                    text.gsub!(/\\/, '\\\\\\\\')
+                    @ole_server.Evaluate(%{capture.output(doItAndPrint("#{text}"))})
                 end
             end
 EOR
@@ -875,9 +895,9 @@ if exists("g:evalSelectionSchemeInterpreter") "{{{2
     command! EvalSelectionQuitScheme    ruby EvalSelection.tear_down(VIM::evaluate("g:evalSelectionSchemeInterpreter"))
     command! EvalSelectionCmdLineScheme call EvalSelectionCmdLine("scheme")
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."Scheme:\\ Setup :EvalSelectionSetupScheme<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Scheme:\\ Command\\ Line :EvalSelectionCmdLineScheme<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."Scheme:\\ Quit  :EvalSelectionQuitScheme<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Scheme.Setup :EvalSelectionSetupScheme<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Scheme.Command\\ Line :EvalSelectionCmdLineScheme<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."Scheme.Quit  :EvalSelectionQuitScheme<cr>"
     end
 
     ruby << EOR
@@ -900,9 +920,9 @@ if exists("g:evalSelectionSpssInterpreter") "{{{2
     command! EvalSelectionCmdLineSPSS call EvalSelectionCmdLine("sps")
     autocmd FileType sps call EvalSelectionParagraphMappings(0, "$(v)")
     if g:evalSelectionPluginMenu != ""
-        exec "amenu ". g:evalSelectionPluginMenu ."SPSS:\\ Setup :EvalSelectionSetupSPSS<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."SPSS:\\ Command\\ Line :EvalSelectionCmdLineSPSS<cr>"
-        exec "amenu ". g:evalSelectionPluginMenu ."SPSS:\\ Quit  :EvalSelectionQuitSPSS<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."SPSS.Setup :EvalSelectionSetupSPSS<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."SPSS.Command\\ Line :EvalSelectionCmdLineSPSS<cr>"
+        exec "amenu ". g:evalSelectionPluginMenu ."SPSS.Quit  :EvalSelectionQuitSPSS<cr>"
     end
 
     fun! EvalSelection_sps(cmd) "{{{3
@@ -915,7 +935,7 @@ if exists("g:evalSelectionSpssInterpreter") "{{{2
         call EvalSelectionGenerateBindings("S", "sps")
     endif
 
-    if !exists("g:evalSelectionSpssCmdLine")
+    if !exists("g:evalSelectionSpssCmdLine") && s:windows
         fun! EvalSelectionRunSpssMenu(menuEntry) "{{{3
             echo "Be careful with this. Some menu entries simply don't work this way.\n".
                         \ "Press the <OK> button when finished, not the <Insert> button."
@@ -935,7 +955,7 @@ if exists("g:evalSelectionSpssInterpreter") "{{{2
                         rv = i.data.InvokeDialogAndReturnSyntax(m, 1)
                         if rv and rv != ""
                             # VIM::command(%{echom "#{rv}"})
-                            VIM::command(%{norm! a#{rv}})
+                            VIM::command(%{norm! a #{rv}})
                         end
                     rescue WIN32OLERuntimeError => e
                         VIM::command(%{echohl Error})
@@ -1058,5 +1078,46 @@ EOR
     endif
 endif
 
+finish
 
-" vim: ff=unix
+CHANGES:
+0.5 :: Initial Release
+
+0.6 :: Interaction with interpreters; separated logs; use of redir; 
+EvalSelectionCmdLine (CLI like interaction) 
+
+0.7 :: Improved interaction (e.g., multi-line commands in R); moved code 
+depending on +ruby to EvalSelectionRuby.vim (thanks to Grant Bowman for 
+pointing out this problem); saved all files in unix format; added 
+python, perl, and tcl (I can't tell if they work) 
+
+0.8 :: improved interaction with external interpreters (it's still not 
+really usable but it's getting better); reunified EvalSelection.vim and 
+EvalSelectionRuby.vim 
+
+0.9 :: support for communication via win32 COM/OLE (R, SPSS); general 
+calculator shortcuts 
+
+0.10 :: capture interaction with R via R(D)COM; "RDCOM" uses a 2nd 
+instance of gvim as a pager (it doesn't start RCmdr any more); "RDCOM 
+Commander" uses RCmdr; "RDCOM Clean" and "RDCOM Commander Clean" modes; 
+take care of functions with void results (like data, help.search ...) 
+
+0.11
+R: set working directory and load .Rdata if available, word completion, 
+catch errors, build objects menu; SPSS: show data window, build menu; 
+g:evalSelectionLogCommands defaults to 1; revamped log 
+
+0.14
+Fixed some menu-related problems; <LocalLeader>r shortkey for SPSS and R 
+(work similarly to ctrl-r in the spss editor); display a more useful 
+error message when communication via OLE goes wrong; possibility to save 
+the interaction log; post setup & tear down hooks for external 
+interpreters; don't use win32ole when not on windows
+
+0.15
+- Escape backslashes in EvalSelectionTalk()
+- Catch errors on EvalSelectionQuit (you'll have to manually kill zombie 
+processes)
+- SPSS: Insert a space before variable names (as does SPSS)
+

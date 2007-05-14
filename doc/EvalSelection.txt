@@ -66,9 +66,19 @@ neither of them. Anyway, as I happen to use a Vim with +tcl, +python and
 [1] This can be used to evaluate formulas like "1+2=" and append (or replace 
 it with) the result. How the formula is precisely interpreted depends on the 
 interpreter being used. Some interpreters like vim know only integer numbers 
-and the most basic operators. Which interpreter is being used, depends on your 
-vim's compiled in language support. Check out |feature-list|, |has()|, and 
+and the most basic operators. Which interpreter is being used, depends on the 
+compiled-in language support. Check out |feature-list|, |has()|, and 
 |:version|.
+
+If you want, you could define a command like >
+
+    command! -nargs=* Calc let @e=<q-args> | \
+        call EvalSelection_calculate('EvalSelectionEcho')
+
+for performing calculations on the command line, e.g., >
+
+    :Calc 1 + 2
+
 
                                                     *EvalSelection-ExtKeyBindings*
 If ruby-support is compiled in, the following languages[1] are available too 
@@ -381,39 +391,6 @@ Gets stuck when evaluating several expressions at once.
 * Problems~
 - Vim sometimes hangs or crashes (@WinXP) when talking to an external 
   interpreter
-
-
-* Version History~
- 0.14 :: Fixed some menu-related problems; <LocalLeader>r shortkey for SPSS 
- and R (work similarly to ctrl-r in the spss editor); display a more useful 
- error message when communication via OLE goes wrong; possibility to save the 
- interaction log; post setup & tear down hooks for external interpreters
-
- 0.11 :: R: set working directory and load .Rdata if available, word 
- completion, catch errors, build objects menu; SPSS: show data window, build 
- menu; g:evalSelectionLogCommands defaults to 1; revamped log
-
- 0.10 :: capture interaction with R via R(D)COM; "RDCOM" uses a 2nd instance 
- of gvim as a pager (it doesn't start RCmdr any more); "RDCOM Commander" uses 
- RCmdr; "RDCOM Clean" and "RDCOM Commander Clean" modes; take care of 
- functions with void results (like data, help.search ...)
-
- 0.9 :: support for communication via win32 COM/OLE (R, SPSS); general 
- calculator shortcuts
-
- 0.8 :: improved interaction with external interpreters (it's still not really 
- usable but it's getting better); reunified EvalSelection.vim and 
- EvalSelectionRuby.vim
-
- 0.7 :: Improved interaction (e.g., multi-line commands in R); moved code 
- depending on +ruby to EvalSelectionRuby.vim (thanks to Grant Bowman for 
- pointing out this problem); saved all files in unix format; added python, 
- perl, and tcl (I can't tell if they work)
-
- 0.6 :: Interaction with interpreters; separated logs; use of redir; 
- EvalSelectionCmdLine (CLI like interaction)
-
- 0.5 :: Initial Release
 
 
  vim: fdl=1:tw=78

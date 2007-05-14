@@ -2,9 +2,9 @@
 # EvalSelection.rb -- Evaluate text using an external interpreter
 # @Author:      Thomas Link (samul AT web.de)
 # @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
-# @Created:     11-Mär-2004.
-# @Last Change: 04-Mai-2005.
-# @Revision:    0.320
+# @Created:     11-MÃ¤r-2004.
+# @Last Change: 2007-05-09.
+# @Revision:    0.323
 
 # require "open3"
 
@@ -310,10 +310,13 @@ class EvalSelectionOLE < EvalSelectionAbstractInterpreter
 
     def tear_down
         if @ole_server
-            ole_tear_down
-        else
-            true
+            begin
+                ole_tear_down
+            rescue
+            end
+        # else
         end
+        true
     end
     
     def ole_setup
@@ -372,7 +375,7 @@ module EvalSelection
                 VIM::command(%{call EvalSelectionPostTearDown_#{name}())})
             end
         else
-            VIM::command(%Q{throw "EvalSelection: Can't stop #{id}!"})
+            VIM::command(%Q{echoerr "EvalSelection: Can't stop #{id}!"})
         end
     end
 
