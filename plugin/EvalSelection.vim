@@ -2,8 +2,8 @@
 " @Author:      Thomas Link (samul AT web.de)
 " @License:     GPL (see http://www.gnu.org/licenses/gpl.txt)
 " @Created:     29-Jän-2004.
-" @Last Change: 2007-05-14.
-" @Revision:    0.14.840
+" @Last Change: 2007-06-08.
+" @Revision:    0.16.850
 " 
 " vimscript #889
 " 
@@ -17,7 +17,7 @@
 if &cp || exists("s:loaded_evalselection") "{{{2
     finish
 endif
-let s:loaded_evalselection = 13
+let s:loaded_evalselection = 16
 
 " Parameters {{{2
 if !exists("g:evalSelectionLeader")         | let g:evalSelectionLeader         = '<Leader>e' | endif "{{{2
@@ -333,10 +333,7 @@ endif
 if has("tcl") "{{{2
     if !exists("*EvalSelectionCalculate")
         fun! EvalSelectionCalculate(formula) "{{{3
-            redir @e
-            exec "tcl puts [expr ". a:formula ."]"
-            redir END
-            let @e = substitute(@e, '\^M$', '', '')
+            call EvalSelection_mz_helper("puts [expr ". a:formula ."]")
         endf
     endif
     fun! EvalSelection_tcl(cmd) "{{{3
@@ -355,6 +352,30 @@ if has("tcl") "{{{2
         exec "amenu ". g:evalSelectionPluginMenu ."TCL:\\ Command\\ Line :EvalSelectionCmdLine tcl<cr>"
     end
     command! EvalSelectionCmdLineTcl :EvalSelectionCmdLine tcl
+endif
+
+if has("mzscheme") "{{{2
+    if !exists("*EvalSelectionCalculate")
+        fun! EvalSelectionCalculate(formula) "{{{3
+            call EvalSelection_mz_helper("(display (". a:formula ."))")
+        endf
+    endif
+    fun! EvalSelection_mz(cmd) "{{{3
+        call EvalSelection("mz", a:cmd, "call", "EvalSelection_mz_helper('", "')")
+    endf
+    fun! EvalSelection_mz_helper(text) "{{{3
+        redir @e
+        exe "mz ". a:text
+        redir END
+        let @e = substitute(@e, '\^M$', '', '')
+    endf
+    if !hasmapto("EvalSelection_mzscheme(")
+        call EvalSelectionGenerateBindings("z", "mz")
+    endif
+    if g:evalSelectionPluginMenu != ''
+        exec 'amenu '. g:evalSelectionPluginMenu .'MzScheme:\ Command\ Line :EvalSelectionCmdLine mz<cr>'
+    end
+    command! EvalSelectionCmdLineMz :EvalSelectionCmdLine mz
 endif
 
 fun! EvalSelection_sh(cmd) "{{{3
@@ -1117,7 +1138,10 @@ interpreters; don't use win32ole when not on windows
 
 0.15
 - Escape backslashes in EvalSelectionTalk()
+- SPSS: Insert a space before variable names (as does SPSS)
+
+0.16
+- MzScheme support (thanks to Mark Smithfield)
 - Catch errors on EvalSelectionQuit (you'll have to manually kill zombie 
 processes)
-- SPSS: Insert a space before variable names (as does SPSS)
 
